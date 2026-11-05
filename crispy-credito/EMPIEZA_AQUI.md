@@ -1,6 +1,16 @@
-# Actualización 2.2 de Crispy Crédito
+# Actualización 2.3 de Crispy Crédito
 
-## Para tu app que ya está conectada
+## Si ya instalaste la versión 2.2
+
+Solo reemplaza la carpeta `crispy-credito` en GitHub y espera el despliegue en Vercel. Esta versión no cambia la estructura SQL. Conserva tu configuración de acceso y los datos.
+
+Incluye **Editar crédito**, **Eliminar crédito**, confirmaciones sin escribir nombres y montos con separadores como **1.000.000** en los formularios. Al editar un crédito se recalculan sus abonos; si las nuevas condiciones vuelven incompatible un pago existente, el cambio se rechaza completo.
+
+Puedes abonar antes del vencimiento de la primera cuota. El selector muestra todos los créditos con saldo, incluso si un desembolso quedó con fecha futura: en ese caso muestra un aviso y un botón para corregirlo. La fecha de un abono real puede ser cualquier día desde el desembolso hasta hoy; no necesitas esperar al vencimiento. Los pagos anticipados se aplican a cuotas con su interés contractual según las reglas actuales.
+
+Eliminar un crédito conserva al cliente y sus otros créditos, y borra solo ese crédito con sus abonos. Eliminar el cliente borra toda su ficha y créditos. En ambos casos aparece un aviso con casilla marcada por defecto y un botón final **Sí, eliminar definitivamente**; no se escribe ningún nombre. Puedes cancelar o desmarcar la casilla para impedir la confirmación.
+
+## Si vienes de una versión anterior a 2.2
 
 1. Descarga primero **Mi espacio → Descargar respaldo** en tu app actual.
 2. Extrae este ZIP. Abre **ACTUALIZAR_APP.sql** con Bloc de notas, copia todo y ejecútalo en **Supabase → SQL Editor → New query → Run**, con el rol **postgres**. Conserva tus datos y autoriza como administrador a la cuenta que ya tenía cartera. No es necesario borrar ni volver a crear usuarios.
@@ -12,7 +22,7 @@ El login público dice **Hola, Crispy**. Cada persona verá su nombre elegido al
 
 ## Qué incluye
 
-- Eliminar cualquier cliente, incluso con historial. Pide escribir el nombre exacto y marcar la confirmación. Se eliminan esa ficha, sus préstamos y todos sus abonos. La cuenta de acceso no se elimina.
+- Eliminar cualquier cliente, incluso con historial. Muestra una advertencia y una casilla marcada por defecto; la eliminación se realiza al pulsar el botón de confirmación. Se eliminan esa ficha, sus préstamos y todos sus abonos. La cuenta de acceso no se elimina.
 - Préstamos del más reciente al más antiguo, según registro. En préstamos anteriores sin fecha de registro se usa la fecha de desembolso.
 - Fechas automáticas de cuotas y casilla **Personalizar la fecha de pago**. Eliges el primer vencimiento y los siguientes repiten ese día cada mes. Solo cambian las fechas, no el interés contractual. Los préstamos anteriores conservan sus fechas.
 - Nombre preferido y registro con correo y contraseña.

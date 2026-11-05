@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
-import {emptyWorkspace,validateWorkspace} from '../dist/store.mjs';
+import {emptyWorkspace,validateWorkspace,editLoan,deleteLoan} from '../dist/store.mjs';
 const db=new PGlite();
 await db.exec(`create schema auth;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}'::jsonb);create role anon;create role authenticated;grant usage on schema auth to anon,authenticated;create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;`);
 await db.exec(await fs.readFile(new URL('../supabase/01_base_de_datos.sql',import.meta.url),'utf8'));
@@ -49,6 +49,10 @@ const patch=await fs.readFile(patchPath,'utf8');await db.exec(patch);await db.ex
 await db.exec(`set role authenticated;set request.jwt.claim.sub='${a}'`);
 assert.deepEqual((await db.query('select payload,revision from public.cc_workspaces')).rows[0],before);
 await save(data);
+const corrected=structuredClone(data);editLoan(corrected,'loan-first-client',{principal:1200000,months:8});
+assert.equal((await save(corrected)).payload.loans.find(l=>l.id==='loan-first-client').principal,1200000);
+deleteLoan(corrected,'loan-first-client',true);
+const removed=await save(corrected);assert.equal(removed.payload.clients.length,data.clients.length);assert.equal(removed.payload.loans.length,data.loans.length-1);assert.equal(removed.payload.payments.length,0);
 await db.exec(`set request.jwt.claim.sub='${b}'`);
 assert.equal((await db.query('select payload from public.cc_workspaces')).rows[0].payload.loans.length,0);
 await db.exec('set role anon');
