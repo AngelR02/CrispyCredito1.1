@@ -14,12 +14,30 @@ export function validateWorkspace(source,{allowLegacy=false}={}){
   return{version:2,clients:d.clients.map(c=>({id:c.id,name:c.name.trim(),phone:c.phone,note:c.note,createdAt:c.createdAt,archivedAt:c.archivedAt})),loans:d.loans.map(l=>({id:l.id,clientId:l.clientId,principal:l.principal,rate:l.rate,lateRate:l.lateRate,months:l.months,start:l.start,note:l.note,...(l.firstDueDate?{firstDueDate:l.firstDueDate}:{}),...(l.createdAt?{createdAt:l.createdAt}:{})})),payments:d.payments.map(p=>({id:p.id,loanId:p.loanId,amount:p.amount,date:p.date,method:p.method,note:p.note,createdAt:p.createdAt,reversed:p.reversed,...(p.legacySplit?{legacySplit:p.legacySplit}:{})}))};
 }
 export function archiveClient(d,id,archived){const c=d.clients.find(c=>c.id===id);if(!c)throw Error('No encontramos ese cliente.');c.archivedAt=archived?today():null;}
-export function deleteClient(d,id,name,confirmed=false){
+export function deleteClient(d,id,confirmed=false){
   const c=d.clients.find(c=>c.id===id);
-  if(!c||name!==c.name)throw Error('Escribe exactamente el nombre del cliente.');
+  if(!c)throw Error('No encontramos ese cliente.');
   if(confirmed!==true)throw Error('Confirma que deseas eliminar el cliente y todo su historial.');
   const ids=new Set(d.loans.filter(l=>l.clientId===id).map(l=>l.id));
   d.payments=d.payments.filter(p=>!ids.has(p.loanId));
   d.loans=d.loans.filter(l=>l.clientId!==id);d.clients=d.clients.filter(c=>c.id!==id);
 }
 export function recentLoans(loans){return loans.map((l,index)=>({l,index})).sort((a,b)=>Date.parse(b.l.createdAt||b.l.start+'T00:00:00Z')-Date.parse(a.l.createdAt||a.l.start+'T00:00:00Z')||b.index-a.index).map(x=>x.l);}
+
+export function deleteLoan(d,id,confirmed=false){
+  if(!d.loans.some(l=>l.id===id))throw Error('No encontramos ese crédito.');
+  if(confirmed!==true)throw Error('Confirma que deseas eliminar este crédito y sus abonos.');
+  d.payments=d.payments.filter(p=>p.loanId!==id);
+  d.loans=d.loans.filter(l=>l.id!==id);
+}
+export function editLoan(d,id,changes){
+  const next=structuredClone(d),l=next.loans.find(l=>l.id===id);
+  if(!l)throw Error('No encontramos ese crédito.');
+  for(const k of ['clientId','principal','rate','lateRate','months','start','note'])if(Object.hasOwn(changes,k))l[k]=changes[k];
+  if(Object.hasOwn(changes,'firstDueDate')){if(changes.firstDueDate==null||changes.firstDueDate==='')delete l.firstDueDate;else l.firstDueDate=changes.firstDueDate;}
+  const validated=validateWorkspace(next);
+  Object.assign(d,validated);
+}
+export function loansAcceptingPayments(d,asOf=today()){
+  return recentLoans(d.loans).filter(l=>calculateLoan(l,d.payments,asOf).remainingTotal>0);
+}

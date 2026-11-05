@@ -1,13 +1,19 @@
-# Crispy Crédito · versión 2.2
+# Crispy Crédito · versión 2.3
 
 App personal para clientes, préstamos y abonos, con acceso separado para administradores y clientes. Colores verde y blanco, azul y pequeños acentos naranjas.
 
-Empieza por **EMPIEZA_AQUI.md**. Para tu proyecto existente, aplica **ACTUALIZAR_APP.sql**, sube el código actualizado a GitHub y sigue **CONECTAR_LOGIN.md** para habilitar registro y correo. Esta entrega no modifica servicios remotos.
+Empieza por **EMPIEZA_AQUI.md**. Si ya aplicaste la actualización 2.2, basta subir este código a GitHub. Si vienes de una versión anterior, aplica **ACTUALIZAR_APP.sql** y sigue **CONECTAR_LOGIN.md** para habilitar registro y correo. Esta entrega no modifica servicios remotos.
 
 ## Cambios de esta versión
 
-- Eliminación de clientes con cualquier historial: nombre exacto y casilla de aceptación. Elimina también préstamos y abonos vinculados; los datos de otras personas se conservan. Archivar sigue disponible.
-- Préstamos del más reciente al más antiguo. Los préstamos nuevos guardan su fecha de creación; los anteriores usan la de desembolso como referencia. La numeración de cada préstamo conserva su posición histórica.
+- Editar datos de un crédito, incluido cliente, monto, fechas, cuotas, tasas y observaciones. Se mantienen su identificador, fecha de registro y abonos; el plan y la distribución se recalculan, y un cambio incompatible se rechaza sin guardar parcialmente.
+- Eliminar solo un crédito y todos sus abonos manteniendo al cliente y sus demás créditos. Las confirmaciones de cliente y crédito usan una casilla marcada por defecto y un botón final, sin escribir nombres.
+- Selector de abonos por saldo total del plan, sin filtrar por fecha de vencimiento ni ocultar créditos por fecha futura de desembolso. Un desembolso futuro se explica y ofrece corregirlo; no se registra un ingreso anterior al desembolso. Cualquier abono anticipado entre desembolso y hoy se acepta si no supera el plan pendiente.
+- Montos COP con puntos de miles en los campos de crédito y abono, sin cambiar los importes numéricos guardados. Las tasas conservan sus decimales.
+
+
+- Eliminación de clientes con cualquier historial: aviso, casilla de aceptación marcada por defecto y botón final de confirmación. Elimina también préstamos y abonos vinculados; los datos de otras personas se conservan. Archivar sigue disponible.
+- Préstamos del más reciente al más antiguo. Los préstamos nuevos guardan su fecha de creación; los anteriores usan la de desembolso como referencia.
 - Fecha automática de cuotas y primer vencimiento opcional personalizado, compatible con respaldos anteriores. La mora usa los vencimientos reales del plan elegido.
 - Nombre preferido en Mi espacio, saludo y perfil. El login público dice Hola, Crispy.
 - Registro por correo y contraseña, confirmación de correo, invitaciones y recuperación.
