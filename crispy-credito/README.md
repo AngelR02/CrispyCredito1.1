@@ -13,11 +13,11 @@ App personal para clientes, préstamos y abonos. Diseño verde y blanco, con azu
 - Respaldo JSON e importación de la versión anterior conservando sus desgloses históricos; exportación CSV.
 - Guardado transaccional con control de versión para evitar que dos dispositivos sobrescriban cambios recientes.
 
-## Estado de la conexión
+## Conexión lista para ejecutar por ti
 
-El código de acceso y persistencia está implementado, pero `dist/config.js` se entrega sin proyecto ni clave. Debes configurar tu proyecto de Supabase para activar el acceso. Hasta entonces, el login indica “Conexión pendiente” y no permite entrar. Instalar la integración de Supabase en ChatGPT no configura automáticamente el proyecto de la app.
+Empieza por `EMPIEZA_AQUI.md`. El único script que necesitas pegar en Supabase es `INICIAR_SUPABASE.sql`: crea la estructura y autoriza al usuario `crspy@credito.com` que ya creaste. Esta copia incluye la URL y la clave pública publishable vigentes del proyecto `supabase-cerulean-house`.
 
-Los cálculos, permisos y migración SQL fueron probados localmente. No se ha validado una sesión real ni el envío de correos contra tu proyecto de Supabase, ni se ha actualizado tu repositorio GitHub o tu despliegue de Vercel desde esta conversación.
+La revisión encontró que la base actual no tiene la tabla `cc_workspaces`. Por eso debes ejecutar el script completo antes de entrar. Esta entrega contiene código y no aplica cambios a tu base, GitHub o Vercel. La tabla `notes` que ya tienes se conserva.
 
 ## Antes de actualizar tu app existente
 
@@ -28,7 +28,7 @@ Después de configurar e iniciar sesión en la nueva versión, usa **Mi espacio 
 ## 1. Configurar Supabase
 
 1. Crea o elige un proyecto de Supabase para Crispy Crédito.
-2. En **SQL Editor**, ejecuta el archivo `supabase/01_base_de_datos.sql`. Crea únicamente tablas y funciones con prefijo `cc_` para esta aplicación.
+2. Para esta entrega, usa el script único `INICIAR_SUPABASE.sql`. Los archivos de `supabase/` se mantienen como referencia para instalar la aplicación en otros proyectos.
 3. En **Authentication → Users → Add user**, crea tu usuario con tu correo y contraseña. Completa la confirmación del correo según las opciones del panel. La contraseña no se escribe en el código ni en GitHub.
 4. En `supabase/02_habilitar_propietario.sql`, reemplaza `TU_CORREO` por el correo de ese usuario. Ejecuta el archivo en SQL Editor. Habilita una cartera vacía para esa cuenta y no borra registros si se vuelve a ejecutar.
 5. Desactiva el registro público de nuevos usuarios para este proyecto personal. La aplicación no contiene pantalla de registro. Incluso si alguien crea otra cuenta, no tendrá cartera autorizada hasta que se la habilites explícitamente en la base.
@@ -101,7 +101,7 @@ Un pago con fecha anterior o una anulación vuelve a procesar todos los pagos en
 
 ## Datos y permisos
 
-La cartera es un documento JSON versionado por propietario en `public.cc_workspaces`, adecuado para este uso personal de registros de texto. Solo el usuario de esa fila puede leerla mediante RLS. Visitantes sin sesión no pueden leer ni escribir. Los usuarios autenticados no pueden modificar la tabla directamente: guardan mediante `cc_save_workspace`, que obtiene la identidad de la sesión, comprueba que esté habilitada, valida la estructura y referencias de los registros, bloquea la fila y verifica su revisión antes de actualizarla.
+La cartera es un documento JSON versionado por propietario en `public.cc_workspaces`, adecuado para este uso personal de registros de texto. Solo el usuario de esa fila puede leerla mediante RLS. Visitantes sin sesión no pueden leer ni escribir. Los usuarios autenticados no pueden modificar la tabla directamente: llaman a `cc_save_workspace`, una entrada pública sin privilegios elevados. Esta delega en una función del esquema no expuesto `crispy_private`, que obtiene la identidad de la sesión, comprueba que esté habilitada, valida la estructura y referencias de los registros, bloquea la fila y verifica su revisión antes de actualizarla.
 
 Los cálculos de distribución se derivan de los importes y fechas en el cliente; no se almacenan desgloses automáticos editables. La función SQL valida estructura, tipos, límites y referencias del documento, no repite el motor financiero completo en SQL. Esta aplicación es una herramienta personal de registro, no un sistema de cobros bancarios ni una plataforma multiusuario de préstamos.
 
