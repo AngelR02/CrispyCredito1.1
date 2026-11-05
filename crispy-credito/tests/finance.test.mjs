@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {installment,schedule,calculateLoan,addMonths,daysBetween,previewPayment,validDate} from '../dist/finance.mjs';
-import {emptyWorkspace,validateWorkspace,archiveClient,deleteUnusedClient} from '../dist/store.mjs';
+import {emptyWorkspace,validateWorkspace,archiveClient,deleteClient} from '../dist/store.mjs';
 let checks=0;
 const check=(name,fn)=>{fn();checks++;console.log('✓ '+name);};
 const loan={id:'l',clientId:'c',principal:300000,rate:0,months:3,lateRate:3,start:'2026-01-01',note:''};
@@ -26,8 +26,8 @@ check('Desglose suma exactamente el valor recibido',()=>{const r=previewPayment(
 check('Fechas inválidas, montos negativos y tasas inválidas rechazados',()=>{assert.equal(validDate('2026-02-30'),false);assert.throws(()=>installment(-1,1,3));assert.throws(()=>installment(1000,1,0));assert.throws(()=>calculateLoan({...loan,lateRate:0.0001},[],'2026-02-01'));});
 const workspace=()=>({version:2,clients:[{id:'c',name:'Prueba',phone:'',note:'',createdAt:'2026-01-01',archivedAt:null}],loans:[{...loan}],payments:[]});
 check('Archivo y restauración conservan préstamos y saldos',()=>{const d=workspace();archiveClient(d,'c',true);assert.ok(d.clients[0].archivedAt);assert.equal(d.loans.length,1);archiveClient(d,'c',false);assert.equal(d.clients[0].archivedAt,null);});
-check('Cliente con historial no se puede eliminar',()=>{assert.throws(()=>deleteUnusedClient(workspace(),'c','Prueba'),/historial/);});
-check('Eliminación exige nombre exacto y ningún historial',()=>{const d=workspace();d.loans=[];assert.throws(()=>deleteUnusedClient(d,'c','Otro'));deleteUnusedClient(d,'c','Prueba');assert.equal(d.clients.length,0);});
+check('Eliminar con historial exige confirmación y borra sus préstamos',()=>{const d=workspace();assert.throws(()=>deleteClient(d,'c','Prueba'),/Confirma/);deleteClient(d,'c','Prueba',true);assert.equal(d.loans.length,0);assert.equal(d.clients.length,0);});
+check('Eliminación exige nombre exacto y confirmación',()=>{const d=workspace();d.loans=[];assert.throws(()=>deleteClient(d,'c','Otro'));deleteClient(d,'c','Prueba',true);assert.equal(d.clients.length,0);});
 check('Se rechazan referencias rotas y duplicados',()=>{const d=workspace();d.loans[0].clientId='otro';assert.throws(()=>validateWorkspace(d));const e=workspace();e.clients.push({...e.clients[0]});assert.throws(()=>validateWorkspace(e));});
 check('Respaldo anterior conserva abonos y no cobra mora retroactiva',()=>{const d=workspace();d.version=1;delete d.clients[0].archivedAt;delete d.loans[0].lateRate;d.payments=[{id:'p',loanId:'l',capital:50000,interest:0,date:'2026-02-11',method:'Efectivo',note:'',createdAt:'2026-02-11T12:00:00Z'}];const migrated=validateWorkspace(d,{allowLegacy:true});assert.equal(migrated.loans[0].lateRate,0);const s=calculateLoan(migrated.loans[0],migrated.payments,'2026-03-01');assert.equal(s.balance,250000);assert.equal(s.paidLate,0);});
 check('Espacio inicial vacío, sin ejemplos ni datos inventados',()=>{assert.deepEqual(emptyWorkspace(),{version:2,clients:[],loans:[],payments:[]});});
