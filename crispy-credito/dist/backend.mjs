@@ -1,13 +1,17 @@
 import{PUBLIC_CONFIG}from'./config.js';
+import{authMessage,resolveAuthEntry,passwordReturnUrl,clearPasswordFlow}from'./auth-flow.mjs';
 let supabase;
 function publicKey(key){if(key.startsWith('sb_publishable_'))return true;try{const body=JSON.parse(atob(key.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));return body.role==='anon';}catch{return false;}}
 export const isConfigured=()=>/^https:\/\/[a-z0-9-]+\.supabase\.co\/?$/.test(PUBLIC_CONFIG.supabaseUrl)&&publicKey(PUBLIC_CONFIG.supabasePublishableKey);
-async function api(){if(!isConfigured())throw Error('Falta conectar el proyecto de Supabase.');if(!supabase){const{createClient}=await import('./vendor/supabase.js');supabase=createClient(PUBLIC_CONFIG.supabaseUrl,PUBLIC_CONFIG.supabasePublishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:'pkce'}});}return supabase;}
+async function api(){if(!isConfigured())throw Error('Falta conectar el proyecto de Supabase.');if(!supabase){const{createClient}=await import('./vendor/supabase.js');supabase=createClient(PUBLIC_CONFIG.supabaseUrl,PUBLIC_CONFIG.supabasePublishableKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,flowType:'implicit'}});}return supabase;}
 export async function currentUser(){if(!isConfigured())return null;const{data:{user},error}=await(await api()).auth.getUser();if(error&&error.name!=='AuthSessionMissingError')throw error;return user;}
-export async function signIn(email,password){const{data,error}=await(await api()).auth.signInWithPassword({email,password});if(error)throw Error(error.code==='invalid_credentials'?'Revisa tu correo y contraseña.':'No pudimos iniciar sesión. Revisa las credenciales y la conexión.');return data.user;}
+export async function signIn(email,password){const{data,error}=await(await api()).auth.signInWithPassword({email,password});if(error)throw Error(authMessage(error,'login'));return data.user;}
 export async function signOut(){const{error}=await(await api()).auth.signOut({scope:'local'});if(error)throw error;}
 export async function loadWorkspace(){const{data,error}=await(await api()).from('cc_workspaces').select('payload,revision,updated_at').single();if(error)throw Error(error.code==='PGRST116'?'Tu usuario aún no tiene acceso a Crispy Crédito. Habilita su espacio en Supabase.':'No pudimos cargar los registros. Revisa la conexión y la base de datos.');return data;}
 export async function saveWorkspace(payload,revision){const{data,error}=await(await api()).rpc('cc_save_workspace',{p_payload:payload,p_expected_revision:revision});if(error){const e=Error(error.code==='40001'?'Hay cambios más recientes en otro dispositivo. Recarga los datos antes de guardar de nuevo.':'No pudimos confirmar el guardado. Recarga y comprueba el historial antes de reintentar.');e.conflict=error.code==='40001';throw e;}return data;}
-export async function requestPasswordReset(email){const{error}=await(await api()).auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname+'#recuperar'});if(error)throw Error('No pudimos enviar la solicitud. Inténtalo más tarde.');}
-export async function updatePassword(password){const{error}=await(await api()).auth.updateUser({password});if(error)throw Error('No pudimos actualizar la contraseña. Revisa los requisitos del proyecto.');}
+export async function requestPasswordReset(email){const{error}=await(await api()).auth.resetPasswordForEmail(email,{redirectTo:passwordReturnUrl(location.href,'recovery')});if(error)throw Error(authMessage(error,'reset'));}
+export async function updatePassword(password){const{data,error}=await(await api()).auth.updateUser({password});if(error)throw Error(authMessage(error,'password'));return data.user;}
 export async function onAuthChange(callback){const{data}=(await api()).auth.onAuthStateChange((event,session)=>callback(event,session?.user??null));return()=>data.subscription.unsubscribe();}
+function tabStorage(){try{return window.sessionStorage;}catch{return null;}}
+export async function authEntry(href=location.href){return resolveAuthEntry({auth:(await api()).auth,href,storage:tabStorage(),replaceUrl:url=>history.replaceState(null,'',url)});}
+export function completePasswordFlow(){clearPasswordFlow(tabStorage());}

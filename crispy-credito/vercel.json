@@ -3,5 +3,16 @@
   "framework": null,
   "outputDirectory": "dist",
   "buildCommand": "",
-  "installCommand": ""
+  "installCommand": "",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    }
+  ]
 }

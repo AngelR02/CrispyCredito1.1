@@ -1,4 +1,4 @@
-# Crispy Crédito · versión 2
+# Crispy Crédito · versión 2.1
 
 App personal para clientes, préstamos y abonos. Diseño verde y blanco, con azul y pequeños acentos naranjas.
 
@@ -13,11 +13,11 @@ App personal para clientes, préstamos y abonos. Diseño verde y blanco, con azu
 - Respaldo JSON e importación de la versión anterior conservando sus desgloses históricos; exportación CSV.
 - Guardado transaccional con control de versión para evitar que dos dispositivos sobrescriban cambios recientes.
 
-## Conexión lista para ejecutar por ti
+## Conectar el acceso
 
-Empieza por `EMPIEZA_AQUI.md`. El único script que necesitas pegar en Supabase es `INICIAR_SUPABASE.sql`: crea la estructura y autoriza al usuario `crspy@credito.com` que ya creaste. Esta copia incluye la URL y la clave pública publishable vigentes del proyecto `supabase-cerulean-house`.
+Empieza por `EMPIEZA_AQUI.md` y sigue `CONECTAR_LOGIN.md`. Esta edición incluye formularios para invitaciones y recuperación, validación del enlace antes de cargar los datos privados y acceso directo para usuarios manuales con correo confirmado y contraseña asignada.
 
-La revisión encontró que la base actual no tiene la tabla `cc_workspaces`. Por eso debes ejecutar el script completo antes de entrar. Esta entrega contiene código y no aplica cambios a tu base, GitHub o Vercel. La tabla `notes` que ya tienes se conserva.
+Esta copia conserva los parámetros públicos de tu proyecto de Supabase. La entrega no modifica tu base, GitHub, Vercel ni contraseñas.
 
 ## Antes de actualizar tu app existente
 
@@ -27,26 +27,11 @@ Después de configurar e iniciar sesión en la nueva versión, usa **Mi espacio 
 
 ## 1. Configurar Supabase
 
-1. Crea o elige un proyecto de Supabase para Crispy Crédito.
-2. Para esta entrega, usa el script único `INICIAR_SUPABASE.sql`. Los archivos de `supabase/` se mantienen como referencia para instalar la aplicación en otros proyectos.
-3. En **Authentication → Users → Add user**, crea tu usuario con tu correo y contraseña. Completa la confirmación del correo según las opciones del panel. La contraseña no se escribe en el código ni en GitHub.
-4. En `supabase/02_habilitar_propietario.sql`, reemplaza `TU_CORREO` por el correo de ese usuario. Ejecuta el archivo en SQL Editor. Habilita una cartera vacía para esa cuenta y no borra registros si se vuelve a ejecutar.
-5. Desactiva el registro público de nuevos usuarios para este proyecto personal. La aplicación no contiene pantalla de registro. Incluso si alguien crea otra cuenta, no tendrá cartera autorizada hasta que se la habilites explícitamente en la base.
-6. En **Settings → API Keys**, copia la clave **publishable** (`sb_publishable_...`). La antigua clave `anon` también es compatible si su JWT tiene rol `anon`.
-7. Copia la URL del proyecto, con formato `https://REFERENCIA.supabase.co`.
-8. Edita `dist/config.js`:
+Para el proyecto existente sigue `CONECTAR_LOGIN.md`: URLs de regreso, plantillas y creación manual de usuarios. Para instalar en un proyecto nuevo ejecuta `INICIAR_SUPABASE.sql`, que incluye el alta automática de carteras y no depende de ningún correo o identificador fijo. Mantén desactivado el registro público; cada usuario que creas o invitas recibe su propia cartera.
 
-```js
-export const PUBLIC_CONFIG = {
-  supabaseUrl: 'https://REFERENCIA.supabase.co',
-  supabasePublishableKey: 'sb_publishable_...',
-};
-```
+`dist/config.js` contiene la URL pública del proyecto y la clave publishable. Si cambias de proyecto, reemplaza ambos valores. Nunca uses una clave secret o service_role en el navegador. Los registros se protegen con autenticación y RLS por propietario.
 
-La URL y la clave publishable son parámetros públicos de la app. La protección de los registros la dan el usuario autenticado, las políticas RLS y la lista de propietarios habilitados. Nunca incluyas una clave `secret` ni `service_role`: esas claves privadas no pertenecen al navegador o al repositorio. El cliente rechaza las claves legacy que no tienen rol `anon`.
-
-9. En **Authentication → URL Configuration**, configura como **Site URL** la dirección estable de tu app en Vercel. Añade la dirección de retorno que usa el código para recuperación: el origen y ruta de esa misma web con `#recuperar`. No uses una URL de un despliegue temporal si puedes usar el dominio estable.
-10. Comprueba tu acceso con el usuario creado. Verifica también el envío de recuperación de contraseña; depende de la configuración de correo de tu proyecto. El flujo PKCE debe completarse en el mismo navegador desde el que se solicita el enlace.
+Los enlaces de invitación y recuperación se verifican antes de mostrar el formulario de contraseña. Se admiten las plantillas token_hash incluidas, retornos implícitos de Supabase y enlaces PKCE previos cuando conservan su verificador. Un enlace anterior que perdió el verificador requiere una nueva solicitud. El estado de formulario se conserva en la pestaña durante una hora; no guarda contraseñas ni tokens en ese marcador.
 
 ## 2. Actualizar GitHub y Vercel
 
@@ -112,13 +97,15 @@ No hay base offline de la cartera ni sincronización automática en segundo plan
 | Archivo | Función |
 | --- | --- |
 | `dist/config.js` | URL y clave pública de tu proyecto |
+| `dist/auth-flow.mjs` | Verificación de enlaces y estado del formulario de contraseña |
 | `dist/backend.mjs` | Sesión, acceso y guardado Supabase |
 | `dist/app.js` | Pantallas, fichas, préstamos y formularios |
 | `dist/finance.mjs` | Cuotas, mora y distribución cronológica |
 | `dist/store.mjs` | Validación, migración, archivo y eliminación |
 | `dist/styles.css` | Diseño y adaptación a pantallas |
 | `supabase/01_base_de_datos.sql` | Tabla, permisos y función transaccional |
-| `supabase/02_habilitar_propietario.sql` | Autorización explícita de tu cuenta |
+| `AUTO_USUARIOS_SUPABASE.sql` | Alta automática de carteras para cuentas creadas en Auth |
+| `supabase/email-invite.html` y `email-recovery.html` | Plantillas de correo para elegir contraseña |
 | `tests/` | Pruebas financieras y de permisos SQL |
 
 ## Probar el código
@@ -138,7 +125,7 @@ npm ci
 npm test
 ```
 
-Las pruebas SQL usan PostgreSQL local en memoria mediante PGlite; no modifican tu proyecto de Supabase. Verifican aislamiento entre usuarios, acceso anónimo bloqueado, escrituras directas bloqueadas, rechazo de revisiones obsoletas, validación de documentos y habilitación de propietario. Las pruebas financieras cubren mora diaria, pagos parciales, fechas anteriores, anulación, redondeos, fin de mes, tasa cero y migración de respaldos.
+Las pruebas SQL usan PostgreSQL local en memoria mediante PGlite; no modifican tu proyecto de Supabase. Verifican aislamiento entre usuarios, acceso anónimo bloqueado, escrituras directas bloqueadas, rechazo de revisiones obsoletas, validación de documentos y habilitación de propietario. Las pruebas de acceso cubren invitaciones, recuperación, enlaces vencidos, recarga de formulario y cuentas manuales con adaptadores controlados. Las pruebas financieras cubren mora diaria, pagos parciales, fechas anteriores, anulación, redondeos, fin de mes, tasa cero y migración de respaldos.
 
 ## Referencias oficiales
 

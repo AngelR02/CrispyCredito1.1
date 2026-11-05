@@ -1,3 +1,4 @@
+-- Instalación completa. Desactiva el registro público: las cuentas se crean desde Auth.
 -- Ejecutar una vez en SQL Editor. No modifica tablas de otras aplicaciones.
 begin;
 create schema if not exists crispy_private;
@@ -88,20 +89,42 @@ $$;
 revoke all on function public.cc_save_workspace(jsonb,bigint) from public,anon,authenticated;
 grant execute on function public.cc_save_workspace(jsonb,bigint) to authenticated;
 
--- Autoriza solo la cuenta que ya creaste. Repetir este script conserva su cartera.
-do $$
-declare owner_id uuid;
+
+create schema if not exists crispy_private;
+
+-- Cada cuenta tendrá su propia cartera. No se reemplazan carteras existentes.
+create or replace function crispy_private.cc_create_user_workspace()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
 begin
-  select id into owner_id from auth.users
-  where id='a646e7ab-69c4-48e3-94f3-c32e125a2ac0'::uuid
-    and lower(email)='crspy@credito.com';
-  if owner_id is null then
-    raise exception 'No se encontró el usuario crspy@credito.com de este proyecto. Revisa Authentication > Users.';
-  end if;
-  insert into public.cc_workspaces(user_id) values(owner_id)
-    on conflict(user_id) do nothing;
-end $$;
-notify pgrst, 'reload schema';
+  insert into public.cc_workspaces (user_id)
+  values (new.id)
+  on conflict (user_id) do nothing;
+  return new;
+end;
+$$;
+
+revoke all on function crispy_private.cc_create_user_workspace()
+from public, anon, authenticated;
+
+drop trigger if exists cc_create_user_workspace on auth.users;
+create trigger cc_create_user_workspace
+after insert on auth.users
+for each row
+execute function crispy_private.cc_create_user_workspace();
+
+-- Habilita también las cuentas que ya creaste, incluida la nueva.
+insert into public.cc_workspaces (user_id)
+select id from auth.users
+on conflict (user_id) do nothing;
+
+
+
+
 commit;
 
-select 'LISTO: ya puedes iniciar sesión con crspy@credito.com' as resultado;
+select u.email, (w.user_id is not null) as acceso_habilitado
+from auth.users u left join public.cc_workspaces w on w.user_id=u.id;
