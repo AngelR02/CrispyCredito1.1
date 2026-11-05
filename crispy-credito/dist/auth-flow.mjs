@@ -43,12 +43,13 @@ export function authMessage(error,context='login'){
   if(code==='email_not_confirmed'||/email not confirmed/i.test(message))return 'Tu correo todavía no está confirmado. Confírmalo antes de ingresar; las cuentas manuales pueden crearse con Auto Confirm User.';
   if(code==='user_banned')return 'Esta cuenta tiene el acceso restringido.';
   if(code==='same_password')return 'Elige una contraseña diferente de la anterior.';
+  if(code==='user_already_exists')return 'Ya existe una cuenta con ese correo. Inicia sesión o recupera tu contraseña.';
   if(code==='weak_password')return 'La contraseña no cumple los requisitos. Usa al menos 12 caracteres.';
   if(error?.status===429||/rate_limit/.test(code))return 'Se alcanzó el límite temporal de solicitudes. Espera unos minutos antes de intentar otra vez.';
   if(/pkce|code_verifier|flow_state/.test(code)||/code verifier|PKCE/i.test(message))return 'Este enlace pertenece a un flujo anterior o a otro navegador. Solicita un enlace nuevo desde la app actualizada.';
   if(/otp_expired|access_denied|expired|invalid_token|auth_code/.test(code)||/expired|one.time token|invalid.*token/i.test(message))return 'El enlace venció o ya se utilizó. Solicita uno nuevo y abre el más reciente.';
   if(error?.name==='AuthRetryableFetchError'||/fetch|network|connection/i.test(message))return 'No pudimos conectar con Supabase. Revisa tu conexión e inténtalo de nuevo.';
-  return context==='password'?'No pudimos guardar la contraseña. Revisa los requisitos e inténtalo otra vez.':context==='link'?'No pudimos verificar el enlace. Solicita uno nuevo y abre el más reciente.':context==='reset'?'No pudimos enviar el enlace. Inténtalo más tarde.':'No pudimos iniciar sesión. Revisa el correo, la contraseña y la conexión.';
+  return context==='signup'?'No pudimos crear tu cuenta. Revisa el correo y los requisitos de contraseña.':context==='password'?'No pudimos guardar la contraseña. Revisa los requisitos e inténtalo otra vez.':context==='link'?'No pudimos verificar el enlace. Solicita uno nuevo y abre el más reciente.':context==='reset'?'No pudimos enviar el enlace. Inténtalo más tarde.':'No pudimos iniciar sesión. Revisa el correo, la contraseña y la conexión.';
 }
 function missingSession(error){return error?.name==='AuthSessionMissingError'||error?.code==='session_not_found';}
 

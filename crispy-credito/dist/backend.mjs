@@ -15,3 +15,7 @@ export async function onAuthChange(callback){const{data}=(await api()).auth.onAu
 function tabStorage(){try{return window.sessionStorage;}catch{return null;}}
 export async function authEntry(href=location.href){return resolveAuthEntry({auth:(await api()).auth,href,storage:tabStorage(),replaceUrl:url=>history.replaceState(null,'',url)});}
 export function completePasswordFlow(){clearPasswordFlow(tabStorage());}
+
+export async function loadProfile(){const{data,error}=await(await api()).from('cc_profiles').select('user_id,preferred_name,role').single();if(error)throw Error('Falta actualizar los perfiles de la app. Ejecuta ACTUALIZAR_APP.sql en Supabase.');return data;}
+export async function saveProfile(preferredName){const name=preferredName.trim();if(name.length<1||name.length>40)throw Error('Escribe un nombre entre 1 y 40 caracteres.');const{data,error}=await(await api()).from('cc_profiles').update({preferred_name:name}).eq('user_id',(await currentUser()).id).select('user_id,preferred_name,role').single();if(error)throw Error('No pudimos guardar tu nombre. Inténtalo de nuevo.');return data;}
+export async function signUp(email,password,preferredName){const url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('auth','signup');const{data,error}=await(await api()).auth.signUp({email,password,options:{emailRedirectTo:url.href,data:{preferred_name:preferredName.trim()}}});if(error){if(error.code==='signup_disabled')throw Error('El registro todavía no está habilitado en Supabase.');throw Error(authMessage(error,'signup'));}return data;}

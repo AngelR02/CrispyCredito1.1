@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import {PGlite} from '@electric-sql/pglite';
+const db=new PGlite();
+const a='11111111-1111-4111-8111-111111111111',b='22222222-2222-4222-8222-222222222222',c='33333333-3333-4333-8333-333333333333';
+await db.exec(`create schema auth;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}'::jsonb);create role anon;create role authenticated;grant usage on schema auth to anon,authenticated;create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;create table public.cc_workspaces(user_id uuid primary key references auth.users(id),payload jsonb not null default '{"version":2,"clients":[],"loans":[],"payments":[]}',revision bigint default 0,updated_at timestamptz default now());`);
+await db.query('insert into auth.users values($1,$2,$3::jsonb)',[a,'owner@example.test',JSON.stringify({preferred_name:'Ángel'})]);
+const payload={version:2,clients:[{id:'c',name:'Conservar',phone:'',note:'',createdAt:'2026-01-01',archivedAt:null}],loans:[],payments:[]};
+await db.query('insert into public.cc_workspaces(user_id,payload,revision) values($1,$2::jsonb,7)',[a,JSON.stringify(payload)]);
+const upgrade=await fs.readFile(new URL('../ACTUALIZAR_APP.sql',import.meta.url),'utf8');await db.exec(upgrade);
+assert.deepEqual((await db.query('select role,preferred_name from public.cc_profiles')).rows[0],{role:'admin',preferred_name:'Ángel'});
+assert.equal((await db.query('select revision from public.cc_workspaces')).rows[0].revision,7);
+// Forged role metadata never creates an admin or grants access to their data.
+await db.query('insert into auth.users values($1,$2,$3::jsonb)',[b,'client@example.test',JSON.stringify({preferred_name:'Laura',role:'admin'})]);
+assert.equal((await db.query('select role from public.cc_profiles where user_id=$1',[b])).rows[0].role,'client');
+assert.equal((await db.query('select count(*)::int as n from public.cc_workspaces')).rows[0].n,1);
+await db.exec(`set role authenticated;set request.jwt.claim.sub='${b}'`);
+assert.equal((await db.query('select * from public.cc_workspaces')).rows.length,0);
+assert.equal((await db.query('select * from public.cc_profiles')).rows.length,1);
+await assert.rejects(()=>db.query('select public.cc_save_workspace($1::jsonb,0)',[JSON.stringify(payload)]),e=>e.code==='42501');
+await assert.rejects(()=>db.exec("update public.cc_profiles set role='admin'"),e=>e.code==='42501');
+await assert.rejects(()=>db.query('insert into public.cc_profiles(user_id,role) values($1,\'admin\')',[c]),e=>e.code==='42501');
+await db.exec("update public.cc_profiles set preferred_name='Lau'");assert.equal((await db.query('select preferred_name from public.cc_profiles')).rows[0].preferred_name,'Lau');
+assert.equal((await db.query('update public.cc_profiles set preferred_name=$1 where user_id=$2 returning user_id',['Inválido',a])).rows.length,0);
+await db.exec('reset role');
+// Even a leftover workspace cannot give a client administrative access.
+await db.query('insert into public.cc_workspaces(user_id) values($1)',[b]);await db.exec(upgrade);await db.exec(upgrade);
+assert.equal((await db.query('select role,preferred_name from public.cc_profiles where user_id=$1',[b])).rows[0].role,'client');
+await db.exec(`set role authenticated;set request.jwt.claim.sub='${b}'`);assert.equal((await db.query('select * from public.cc_workspaces')).rows.length,0);
+await db.exec('reset role');await db.exec((await fs.readFile(new URL('../HABILITAR_ADMIN.sql',import.meta.url),'utf8')).replaceAll('TU_CORREO','client@example.test'));
+await db.exec(`set role authenticated;set request.jwt.claim.sub='${b}'`);assert.equal((await db.query('select * from public.cc_workspaces')).rows.length,1);
+await db.exec(`set request.jwt.claim.sub='${a}'`);assert.deepEqual((await db.query('select payload,revision from public.cc_workspaces')).rows[0],{payload,revision:7});
+await db.exec('set role anon');await assert.rejects(()=>db.query('select * from public.cc_profiles'),e=>e.code==='42501');await assert.rejects(()=>db.query('select * from public.cc_workspaces'),e=>e.code==='42501');
+await db.close();console.log('Profiles checks passed: legacy owner migration, data preserved, signup role spoofing blocked, customer API isolation, restricted name updates, idempotence without role promotion and explicit admin provisioning.');

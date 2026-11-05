@@ -10,11 +10,55 @@ create table if not exists public.cc_workspaces (
   updated_at timestamptz not null default now(),
   constraint cc_payload_size check(octet_length(payload::text)<=5000000)
 );
+-- El rol es un dato protegido del servidor. Los metadatos solo sugieren el nombre.
+create table if not exists public.cc_profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  preferred_name text not null default '' check(length(preferred_name)<=40),
+  role text not null default 'client' check(role in ('admin','client'))
+);
+alter table public.cc_profiles enable row level security;
+revoke all on public.cc_profiles from public,anon,authenticated;
+grant select, update(preferred_name) on public.cc_profiles to authenticated;
+drop policy if exists cc_profile_read on public.cc_profiles;
+create policy cc_profile_read on public.cc_profiles for select to authenticated using ((select auth.uid())=user_id);
+drop policy if exists cc_profile_name on public.cc_profiles;
+create policy cc_profile_name on public.cc_profiles for update to authenticated using ((select auth.uid())=user_id) with check ((select auth.uid())=user_id);
+
+-- Conserva como administradores a quienes ya tenían cartera antes de esta actualización.
+-- ON CONFLICT no altera nombres ni roles si el script se repite.
+insert into public.cc_profiles(user_id,preferred_name,role)
+select u.id,case when jsonb_typeof(u.raw_user_meta_data->'preferred_name')='string' then left(trim(u.raw_user_meta_data->>'preferred_name'),40) else '' end,
+case when w.user_id is not null then 'admin' else 'client' end
+from auth.users u left join public.cc_workspaces w on w.user_id=u.id
+on conflict(user_id) do nothing;
+
+create or replace function crispy_private.cc_is_admin() returns boolean
+language sql stable security invoker set search_path='' as $$
+  select exists(select 1 from public.cc_profiles where user_id=(select auth.uid()) and role='admin');
+$$;
+revoke all on function crispy_private.cc_is_admin() from public,anon,authenticated;
+grant execute on function crispy_private.cc_is_admin() to authenticated;
+
+-- Las altas nuevas, incluso manuales o invitadas, son de tipo cliente.
+-- Elimina el alta antigua que daba cartera a cualquier usuario.
+drop trigger if exists cc_create_user_workspace on auth.users;
+create or replace function crispy_private.cc_create_user_profile() returns trigger
+language plpgsql security definer set search_path='' as $$
+begin
+  insert into public.cc_profiles(user_id,preferred_name,role)
+  values(new.id,case when jsonb_typeof(new.raw_user_meta_data->'preferred_name')='string' then left(trim(new.raw_user_meta_data->>'preferred_name'),40) else '' end,'client')
+  on conflict(user_id) do nothing;
+  return new;
+end $$;
+revoke all on function crispy_private.cc_create_user_profile() from public,anon,authenticated;
+drop trigger if exists cc_create_user_profile on auth.users;
+create trigger cc_create_user_profile after insert on auth.users for each row execute function crispy_private.cc_create_user_profile();
+
 alter table public.cc_workspaces enable row level security;
 revoke all on public.cc_workspaces from anon,authenticated;
 grant select on public.cc_workspaces to authenticated;
 drop policy if exists cc_owner_read on public.cc_workspaces;
-create policy cc_owner_read on public.cc_workspaces for select to authenticated using ((select auth.uid())=user_id);
+create policy cc_owner_read on public.cc_workspaces for select to authenticated using ((select auth.uid())=user_id and (select crispy_private.cc_is_admin()));
 
 create or replace function crispy_private.cc_valid_date(v text) returns boolean language plpgsql immutable security invoker set search_path='' as $$
 begin
@@ -39,7 +83,12 @@ begin
     if not (c ? 'archivedAt') or (c->'archivedAt'<>'null'::jsonb and not crispy_private.cc_valid_date(c->>'archivedAt')) then raise exception 'Archivo inválido'; end if;
   end loop;
   for l in select value from jsonb_array_elements(d->'loans') loop
-    if not exists(select 1 from jsonb_array_elements(d->'clients') c where c->>'id'=l->>'clientId') or not crispy_private.cc_valid_date(l->>'start') then raise exception 'Referencia de préstamo inválida'; end if;
+    if not exists(select 1 from jsonb_array_elements(d->'clients') as client_item(value) where client_item.value->>'id'=l->>'clientId') or not crispy_private.cc_valid_date(l->>'start') then raise exception 'Referencia de préstamo inválida'; end if;
+    if l ? 'firstDueDate' and (jsonb_typeof(l->'firstDueDate') is distinct from 'string' or not crispy_private.cc_valid_date(l->>'firstDueDate') or (l->>'firstDueDate')<=(l->>'start')) then raise exception 'Primera fecha de pago inválida'; end if;
+    if l ? 'createdAt' then
+      if jsonb_typeof(l->'createdAt') is distinct from 'string' or length(l->>'createdAt')>100 then raise exception 'Fecha de registro inválida'; end if;
+      perform (l->>'createdAt')::timestamptz;
+    end if;
     foreach k in array array['principal','months','rate','lateRate'] loop
       if jsonb_typeof(l->k) is distinct from 'number' then raise exception 'Número inválido'; end if;
       n:=(l->>k)::numeric;
@@ -69,6 +118,7 @@ create or replace function crispy_private.cc_save_workspace_internal(p_payload j
 declare owner_id uuid:=auth.uid(); current_revision bigint; updated public.cc_workspaces;
 begin
   if owner_id is null then raise exception 'Acceso no autorizado' using errcode='42501'; end if;
+  if not crispy_private.cc_is_admin() then raise exception 'Solo una cuenta administradora puede guardar una cartera' using errcode='42501'; end if;
   select revision into current_revision from public.cc_workspaces where user_id=owner_id for update;
   if not found then raise exception 'Usuario no habilitado' using errcode='42501'; end if;
   if p_expected_revision is null or current_revision<>p_expected_revision then raise exception 'Conflicto de versión' using errcode='40001'; end if;
