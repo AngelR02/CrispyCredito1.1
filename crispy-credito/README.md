@@ -1,97 +1,149 @@
-# Crispy Crédito
+# Crispy Crédito · versión 2
 
-Aplicación web personal para probar el registro de clientes, préstamos y abonos. Incluye el código editable completo, diseño adaptable a celular y computador, colores de la marca, imagen original y pruebas de cálculo. No necesita instalar dependencias ni pagar por una API de IA.
+App personal para clientes, préstamos y abonos. Diseño verde y blanco, con azul y pequeños acentos naranjas.
 
-## 1. Subir a GitHub desde el navegador
+## Cambios
 
-1. Extrae el ZIP. Entra en la carpeta `crispy-credito`.
-2. En tu cuenta personal de GitHub crea un repositorio llamado `crispy-credito`. Puedes hacerlo privado. Inicialízalo con un README para facilitar la carga desde el navegador.
-3. En el repositorio selecciona **Add file → Upload files**.
-4. Arrastra el CONTENIDO de la carpeta extraída: `dist`, `tests`, `README.md`, `vercel.json` y `.gitignore`. Conserva las carpetas y sus archivos internos. Si no ves `.gitignore`, puedes agregarlo después desde GitHub; no impide publicar esta demo.
-5. Guarda los cambios con **Commit changes** o el flujo de propuesta de cambios que muestre GitHub.
-6. Comprueba que `vercel.json` y `README.md` estén en la raíz del repositorio y que exista `dist/index.html`. No subas solo el ZIP: GitHub no lo extrae automáticamente.
+- Inicio de sesión por correo y contraseña usando Supabase Auth; cierre de sesión y recuperación de contraseña.
+- Sin registros ficticios, rótulos de prueba ni entrada que evada el login.
+- Registros en Supabase, compartidos entre dispositivos con el mismo usuario. La cartera no se almacena en localStorage.
+- Clientes activos, archivados y restaurados. Archivar conserva saldos e historial. Solo una ficha sin préstamos se puede eliminar, confirmando su nombre.
+- Abonos con un único valor recibido y fecha real del pago. La app distribuye automáticamente entre mora, interés y capital.
+- Días de atraso por cuota, recargos diarios sobre capital vencido, pagos parciales, pagos con fecha anterior y anulación con recálculo cronológico.
+- Respaldo JSON e importación de la versión anterior conservando sus desgloses históricos; exportación CSV.
+- Guardado transaccional con control de versión para evitar que dos dispositivos sobrescriban cambios recientes.
 
-## 2. Conectar con Vercel
+## Estado de la conexión
 
-1. En Vercel entra en **Add New → Project** y conecta tu cuenta de GitHub.
-2. Importa el repositorio `crispy-credito`. Si es privado, concede acceso a ese repositorio cuando Vercel lo solicite.
-3. Revisa estos valores:
+El código de acceso y persistencia está implementado, pero `dist/config.js` se entrega sin proyecto ni clave. Debes configurar tu proyecto de Supabase para activar el acceso. Hasta entonces, el login indica “Conexión pendiente” y no permite entrar. Instalar la integración de Supabase en ChatGPT no configura automáticamente el proyecto de la app.
+
+Los cálculos, permisos y migración SQL fueron probados localmente. No se ha validado una sesión real ni el envío de correos contra tu proyecto de Supabase, ni se ha actualizado tu repositorio GitHub o tu despliegue de Vercel desde esta conversación.
+
+## Antes de actualizar tu app existente
+
+Si anotaste información en la versión anterior, abre esa app y descarga **Mi espacio → Descargar respaldo** antes de sustituir sus archivos. El contenido del navegador anterior no se migra automáticamente ni se incluye en este ZIP.
+
+Después de configurar e iniciar sesión en la nueva versión, usa **Mi espacio → Importar respaldo**. La importación reemplaza la cartera completa con tu confirmación. Un respaldo de versión 1 conserva la distribución capital/interés de cada abono y asigna tasa de mora cero a esos préstamos, evitando recargos retroactivos inventados. Si un registro histórico es incompatible con su plan, se rechazará la importación sin modificar la cartera. Conserva el respaldo original.
+
+## 1. Configurar Supabase
+
+1. Crea o elige un proyecto de Supabase para Crispy Crédito.
+2. En **SQL Editor**, ejecuta el archivo `supabase/01_base_de_datos.sql`. Crea únicamente tablas y funciones con prefijo `cc_` para esta aplicación.
+3. En **Authentication → Users → Add user**, crea tu usuario con tu correo y contraseña. Completa la confirmación del correo según las opciones del panel. La contraseña no se escribe en el código ni en GitHub.
+4. En `supabase/02_habilitar_propietario.sql`, reemplaza `TU_CORREO` por el correo de ese usuario. Ejecuta el archivo en SQL Editor. Habilita una cartera vacía para esa cuenta y no borra registros si se vuelve a ejecutar.
+5. Desactiva el registro público de nuevos usuarios para este proyecto personal. La aplicación no contiene pantalla de registro. Incluso si alguien crea otra cuenta, no tendrá cartera autorizada hasta que se la habilites explícitamente en la base.
+6. En **Settings → API Keys**, copia la clave **publishable** (`sb_publishable_...`). La antigua clave `anon` también es compatible si su JWT tiene rol `anon`.
+7. Copia la URL del proyecto, con formato `https://REFERENCIA.supabase.co`.
+8. Edita `dist/config.js`:
+
+```js
+export const PUBLIC_CONFIG = {
+  supabaseUrl: 'https://REFERENCIA.supabase.co',
+  supabasePublishableKey: 'sb_publishable_...',
+};
+```
+
+La URL y la clave publishable son parámetros públicos de la app. La protección de los registros la dan el usuario autenticado, las políticas RLS y la lista de propietarios habilitados. Nunca incluyas una clave `secret` ni `service_role`: esas claves privadas no pertenecen al navegador o al repositorio. El cliente rechaza las claves legacy que no tienen rol `anon`.
+
+9. En **Authentication → URL Configuration**, configura como **Site URL** la dirección estable de tu app en Vercel. Añade la dirección de retorno que usa el código para recuperación: el origen y ruta de esa misma web con `#recuperar`. No uses una URL de un despliegue temporal si puedes usar el dominio estable.
+10. Comprueba tu acceso con el usuario creado. Verifica también el envío de recuperación de contraseña; depende de la configuración de correo de tu proyecto. El flujo PKCE debe completarse en el mismo navegador desde el que se solicita el enlace.
+
+## 2. Actualizar GitHub y Vercel
+
+El ZIP conserva la carpeta `crispy-credito`, igual que tu repositorio actual.
+
+1. Extrae el ZIP. En GitHub, usa **Add file → Upload files** y carga la carpeta actualizada `crispy-credito` con todos sus archivos y subcarpetas para reemplazar los archivos del mismo nombre.
+2. Guarda el commit. No subas el ZIP como si fuera el código: GitHub no lo extrae.
+3. En Vercel conserva:
 
 | Opción | Valor |
 | --- | --- |
-| Framework Preset | Other |
-| Root Directory | `./` (raíz del repositorio) |
+| Root Directory | `crispy-credito` si conservaste esa carpeta en el repositorio |
+| Framework Preset | `Other` |
 | Output Directory | `dist` |
-| Build Command | Vacío / desactivado |
-| Install Command | Vacío / desactivado |
-| Environment Variables | Ninguna para esta demo |
+| Build Command | Vacío |
+| Install Command | Vacío |
+| Environment Variables | No se necesitan: esta edición lee los parámetros públicos de `dist/config.js` |
 
-4. El archivo `vercel.json` incluido configura el directorio de salida y omite instalación y construcción. Si hay una configuración previa en tu cuenta, revisa que no la contradiga.
-5. Pulsa **Deploy**. Al finalizar, Vercel te entregará una dirección de la app.
-6. Prueba agregar un cliente, registrar un préstamo y anotar un abono ficticio.
+Si subes el contenido directamente en la raíz del repositorio, Root Directory debe ser `./`. `vercel.json` debe quedar en esa raíz del proyecto, al lado de `dist` y `package.json`.
 
-No se ha publicado ni probado esta exportación en tu cuenta de Vercel. La publicación depende de tu cuenta, sus permisos y las condiciones del plan. El plan Hobby se limita a uso personal no comercial; consulta sus condiciones si cambia el uso del proyecto.
+La librería de Supabase ya está incluida en `dist/vendor/`; la app estática no necesita instalar paquetes ni ejecutar una construcción. `package.json` y sus dependencias son para pruebas de desarrollo. El archivo `vercel.json` omite instalación y construcción.
 
-## Lo que ya funciona
+4. Con la integración de Git activa, Vercel despliega el commit; si no se inicia, usa Redeploy. Abre el nuevo despliegue y prueba acceder, crear un cliente y guardar un abono ficticio.
 
-- Fichas individuales de clientes con varios préstamos.
-- Búsqueda de clientes y movimientos.
-- Simulación de cuotas mensuales fijas con interés sobre saldo.
-- Registro separado de capital e intereses, con actualización de saldo de capital.
-- Anulación de abonos conservando el registro.
-- Descarga e importación validada de respaldos JSON.
-- Exportación de movimientos a CSV.
-- Adaptación visual a celular y computador.
+## Reglas de cálculo
 
-## Datos y acceso de esta versión
+### Plan ordinario
 
-Los datos iniciales son ficticios. Tus cambios se guardan en `localStorage`, únicamente en ese navegador y en el dominio donde abres la app. Cambiar de dominio, dispositivo, perfil o navegador no traslada los registros. Borrar datos del navegador puede borrarlos. Descargar el código no descarga los datos que hayas escrito en la demo anterior: usa **Mi espacio → Descargar respaldo** y luego importa ese respaldo desde la otra copia de la app.
+Cuotas mensuales fijas con interés sobre saldo. La primera vence un mes después del desembolso. Se conserva el día del mes cuando existe; un desembolso del día 31 vence el último día de febrero y vuelve al 31 en marzo. Los importes se redondean a pesos colombianos y la última cuota ajusta la diferencia de redondeo.
 
-Esta exportación no incluye el acceso privado mediante ChatGPT del enlace anterior, ni login de Supabase. El botón de acceso es una vista conceptual y no solicita contraseñas. Un repositorio privado en GitHub no convierte automáticamente en privada la web publicada. Usa datos ficticios hasta conectar autenticación, permisos y base de datos.
+### Pago automático
 
-No hay claves, contraseñas, datos de tus clientes reales ni credenciales de servicios en el paquete. No subas respaldos de clientes ni claves privadas al repositorio.
+Se atienden las cuotas de la más antigua a la más reciente. En cada una se cubre:
 
-## Cálculos
+1. El recargo de mora ya causado y pendiente.
+2. El interés corriente pendiente de esa cuota.
+3. El capital pendiente de esa cuota.
 
-El método implementado para la simulación es cuota mensual fija con interés sobre el capital pendiente. La primera cuota vence un mes después del desembolso y la última se ajusta por redondeo a pesos colombianos. Los abonos se distribuyen manualmente entre capital e intereses según el acuerdo: solo la parte de capital reduce el capital pendiente.
+El sobrante continúa a la siguiente cuota. Se admiten pagos parciales y varias cuotas en un pago. Si supera el total contractual pendiente en esa fecha, se rechaza para no descartar dinero. Los pagos anticipados de cuotas conservan su interés contractual: esta edición no implementa liquidación anticipada ni abonos extraordinarios exclusivamente a capital.
 
-El calendario es el plan inicial, no se recalcula por abonos extraordinarios. Próximas cuotas es una referencia orientativa, no una liquidación ni un cálculo de mora. Falta acordar tu método de intereses, frecuencia de pago y tratamiento de anticipos antes de usarlo con préstamos reales. No se generan cobros o transferencias bancarias.
+### Mora
 
-## Cómo modificarla
+Tasa mensual configurable en cada préstamo; el formulario no inventa un valor. Escribir cero desactiva el recargo. La tasa admite hasta tres decimales.
 
-Edita los archivos, súbelos al mismo repositorio y guarda un commit. Con la integración de Git configurada, Vercel puede publicar esos cambios automáticamente.
+```
+recargo = capital vencido pendiente × tasa mensual / 100 × días / 30
+```
 
-| Archivo | Contenido |
+El vencimiento tiene cero días de atraso; el día siguiente tiene uno. Se usan días calendario completos y fechas sin hora. No se aplica mora sobre intereses, recargos ni capital de cuotas aún no vencidas. El capital se reduce al aplicar cada abono en su fecha real; los días siguientes usan esa nueva base. Los recargos fraccionarios se acumulan de forma exacta con enteros BigInt y se redondean a pesos al contabilizar; no se capitalizan.
+
+Un pago con fecha anterior o una anulación vuelve a procesar todos los pagos en orden de fecha, hora de registro e identificador. La distribución de pagos posteriores puede cambiar. Si genera un sobrepago o incompatibilidad, se rechaza todo el cambio. Los registros anulados se conservan en el historial.
+
+## Datos y permisos
+
+La cartera es un documento JSON versionado por propietario en `public.cc_workspaces`, adecuado para este uso personal de registros de texto. Solo el usuario de esa fila puede leerla mediante RLS. Visitantes sin sesión no pueden leer ni escribir. Los usuarios autenticados no pueden modificar la tabla directamente: guardan mediante `cc_save_workspace`, que obtiene la identidad de la sesión, comprueba que esté habilitada, valida la estructura y referencias de los registros, bloquea la fila y verifica su revisión antes de actualizarla.
+
+Los cálculos de distribución se derivan de los importes y fechas en el cliente; no se almacenan desgloses automáticos editables. La función SQL valida estructura, tipos, límites y referencias del documento, no repite el motor financiero completo en SQL. Esta aplicación es una herramienta personal de registro, no un sistema de cobros bancarios ni una plataforma multiusuario de préstamos.
+
+No hay base offline de la cartera ni sincronización automática en segundo plano. Usa ↻ para traer los cambios de otro equipo. Un conflicto obliga a recargar antes de repetir el cambio. Si el guardado no se confirma por un corte de red, recarga y revisa el historial antes de reintentar. Descargar respaldos sigue siendo recomendable para recuperar registros borrados o reemplazados por importación.
+
+## Archivos principales
+
+| Archivo | Función |
 | --- | --- |
-| `dist/index.html` | Estructura de la página |
-| `dist/styles.css` | Colores, tipografía y diseño adaptable |
-| `dist/app.js` | Pantallas, clientes, préstamos, abonos y respaldos |
-| `dist/finance.mjs` | Cálculos y calendario |
-| `dist/assets/marca.png` | Referencia original de la marca |
-| `vercel.json` | Configuración para Vercel |
-| `tests/finance.test.mjs` | Pruebas de cálculos |
+| `dist/config.js` | URL y clave pública de tu proyecto |
+| `dist/backend.mjs` | Sesión, acceso y guardado Supabase |
+| `dist/app.js` | Pantallas, fichas, préstamos y formularios |
+| `dist/finance.mjs` | Cuotas, mora y distribución cronológica |
+| `dist/store.mjs` | Validación, migración, archivo y eliminación |
+| `dist/styles.css` | Diseño y adaptación a pantallas |
+| `supabase/01_base_de_datos.sql` | Tabla, permisos y función transaccional |
+| `supabase/02_habilitar_propietario.sql` | Autorización explícita de tu cuenta |
+| `tests/` | Pruebas financieras y de permisos SQL |
 
-## Probar localmente
+## Probar el código
 
-No abras `index.html` con doble clic: los módulos JavaScript requieren un servidor HTTP. Con Python instalado, desde la carpeta del proyecto ejecuta:
+Para ver el login con un servidor estático:
 
 ```sh
 python -m http.server 8000 --directory dist
 ```
 
-Entra en `http://localhost:8000`. Con Node instalado puedes comprobar los cálculos:
+Abre `http://localhost:8000`. No abras el HTML con doble clic. Antes de conectar Supabase mostrará conexión pendiente. Para la recuperación local de contraseña debes añadir el retorno local en URL Configuration del proyecto de pruebas.
+
+Pruebas sin conexión a un proyecto real:
 
 ```sh
-node tests/finance.test.mjs
+npm ci
+npm test
 ```
 
-## Siguiente fase: Supabase
+Las pruebas SQL usan PostgreSQL local en memoria mediante PGlite; no modifican tu proyecto de Supabase. Verifican aislamiento entre usuarios, acceso anónimo bloqueado, escrituras directas bloqueadas, rechazo de revisiones obsoletas, validación de documentos y habilitación de propietario. Las pruebas financieras cubren mora diaria, pagos parciales, fechas anteriores, anulación, redondeos, fin de mes, tasa cero y migración de respaldos.
 
-Conectar Supabase Auth y Postgres para correo y contraseña reales y datos compartidos entre dispositivos. Antes de cargar registros reales: restringir acceso al propietario, cerrar el registro público, activar políticas RLS, validar en servidor y usar transacciones para evitar abonos duplicados o saldos inconsistentes. Las claves privadas deben permanecer fuera del navegador. La app actual todavía no realiza esa conexión.
+## Referencias oficiales
 
-## Documentación oficial
-
-- GitHub: https://docs.github.com/en/repositories/working-with-files/managing-files/adding-a-file-to-a-repository
-- Vercel y GitHub: https://vercel.com/docs/git/vercel-for-github
-- Configuración: https://vercel.com/docs/project-configuration/vercel-json
-- Plan Hobby: https://vercel.com/docs/plans/hobby
+- Acceso: https://supabase.com/docs/reference/javascript/auth-signinwithpassword
+- RLS: https://supabase.com/docs/guides/database/postgres/row-level-security
+- Claves: https://supabase.com/docs/guides/getting-started/api-keys
+- Funciones: https://supabase.com/docs/guides/database/functions
+- Vercel: https://vercel.com/docs/project-configuration/vercel-json

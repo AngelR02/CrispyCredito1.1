@@ -1,0 +1,8 @@
+{
+  "name": "crispy-credito",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node tests/finance.test.mjs && node tests/database.test.mjs"},
+  "devDependencies": {"@electric-sql/pglite": "0.5.15"}
+}
