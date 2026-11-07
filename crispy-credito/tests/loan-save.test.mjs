@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {schedule,calculateLoan} from '../dist/finance.mjs';
+import {ageAt} from '../dist/client-details.mjs';
 import {PGlite} from '@electric-sql/pglite';
 import {emptyWorkspace,validateWorkspace,editLoan,deleteLoan,activeLoans,archiveClient,loansAcceptingPayments} from '../dist/store.mjs';
 const db=new PGlite();
@@ -105,6 +106,36 @@ const bogusTarget=structuredClone(portfolio);
 bogusTarget.payments.at(-1).application='unknown';
 await reject(bogusTarget);
 assert.throws(()=>validateWorkspace(bogusTarget),/aplicación/i);
+// Client details survive validation, saving and reloading without changing existing payments.
+assert.equal(ageAt('1992-11-08','2026-11-07'),33);
+assert.equal(ageAt('1992-11-08','2026-11-08'),34);
+assert.equal(ageAt('1992-02-30','2026-11-07'),null);
+const withDetails=structuredClone(portfolio);
+withDetails.version=5;
+withDetails.clients[0].details={
+  documentNumber:'00123456',birthDate:'1992-11-08',maritalStatus:'Unión libre',
+  disbursementAccount:'Banco de prueba 000123',address:'Calle de prueba',inComplex:true,
+  complexName:'Conjunto de prueba',unit:'Torre 2 · Apartamento 301',neighborhood:'Barrio de prueba',
+  city:'Villavicencio',occupation:'Diseño'
+};
+withDetails.clients[1].details={age:36};
+assert.deepEqual(validateWorkspace(withDetails),withDetails);
+assert.deepEqual((await save(withDetails)).payload,withDetails);
+assert.deepEqual((await db.query('select payload from public.cc_workspaces')).rows[0].payload,withDetails);
+await reject(portfolio);
+for(const details of [
+  {birthDate:'1992-02-30'},{birthDate:'2099-01-01'},{birthDate:'1992-11-08',age:33},
+  {age:31.5},{documentNumber:123},{complexName:'Conjunto de prueba'}
+]){
+  const invalid=structuredClone(withDetails);
+  invalid.clients[0].details=details;
+  assert.throws(()=>validateWorkspace(invalid));
+  await reject(invalid);
+}
+const invalidPartner=structuredClone(withDetails);
+invalidPartner.clients.at(-1).details={city:'Villavicencio'};
+assert.throws(()=>validateWorkspace(invalidPartner));
+await reject(invalidPartner);
 await db.exec(`set request.jwt.claim.sub='${b}'`);
 assert.equal((await db.query('select payload from public.cc_workspaces')).rows[0].payload.loans.length,0);
 await db.exec('set role anon');

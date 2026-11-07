@@ -1,5 +1,6 @@
+import { CLIENT_DETAIL_FIELDS, EARLIEST_BIRTH_DATE, MAX_MANUAL_AGE, ageAt } from './client-details.mjs';
 import { installment, schedule, ledger, addMonths, today, validDate, previewPayment, PAYMENT_APPLICATIONS } from './finance.mjs';
-import { emptyWorkspace, validateWorkspace, archiveClient, deleteClient, deleteLoan, editLoan, recentLoans, activeLoans, loansAcceptingPayments } from './store.mjs';
+import { WORKSPACE_VERSION, emptyWorkspace, validateWorkspace, archiveClient, deleteClient, deleteLoan, editLoan, recentLoans, activeLoans, loansAcceptingPayments } from './store.mjs';
 import * as backend from './backend.mjs';
 import{parseCOP,formatCOP,handleMoneyInput}from'./money-input.mjs';
 const $=s=>document.querySelector(s);
@@ -53,7 +54,7 @@ function loansView(){const list=recentLoans(activeLoans(data)).filter(l=>(client
 function paymentsTable(list,showClient=true){return `<div class="table-wrap"><table><thead><tr><th>FECHA</th>${showClient?'<th>CLIENTE</th>':''}<th>CAPITAL</th><th>INTERÉS</th><th>TOTAL</th><th>ATRASO AL PAGAR</th><th></th></tr></thead><tbody>${list.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt)).map(p=>{const r=receiptFor(p);return `<tr ${p.reversed?'class="reversed"':''}><td>${date(p.date)}</td>${showClient?`<td>${esc(client(loan(p.loanId).clientId).name)}</td>`:''}<td>${r?money(r.capital):'—'}</td><td>${r?money(r.interest):'—'}</td><td class="cell-money">${money(p.amount)}</td><td>${p.reversed?'<span class="badge gray">Anulado</span>':(r.daysLate?r.daysLate+' días':'A tiempo')}</td><td>${button('Detalle','payment-detail','small ghost','',`data-id="${esc(p.id)}"`)}</td></tr>`;}).join('')}</tbody></table></div>`;}
 function paymentsView(){const list=activePayments().filter(p=>(client(loan(p.loanId).clientId).name+' '+p.method).toLocaleLowerCase().includes(query.toLocaleLowerCase()));return heading('Movimientos','Un valor por abono. El desglose se calcula por ti.',button('Registrar abono','new-payment','primary','plus'))+`<div class="toolbar"><label class="search">${icon('search')}<input id="search" aria-label="Buscar movimiento" placeholder="Buscar por cliente o medio de pago…" value="${esc(query)}"></label>${button('Exportar CSV','csv','','download')}</div><section class="panel">${list.length?paymentsTable(list):empty('Todavía no hay abonos','Cuando recibas un pago, regístralo aquí.')}</section>`;}
 function clientView(id){const c=client(id);if(!c)return empty('Cliente no encontrado','Vuelve a la lista de clientes.');const partner=isPartner(c),credit=partner?'aporte':'préstamo',personLabel=partner?'socio':'cliente';
-  const ls=recentLoans(data.loans.filter(l=>l.clientId===id)),t=totals(ls),ps=data.payments.filter(p=>ls.some(l=>l.id===p.loanId));return `<button type="button" class="back" data-action="${peoplePage(c)}">${icon('back')} Volver a ${peoplePage(c)}</button><div class="page-heading"><div class="client-head"><span class="person-avatar">${esc(initials(c.name))}</span><div><div class="eyebrow">${partner?'FICHA DEL SOCIO':'HOJA DE VIDA DEL CLIENTE'}</div><h1>${esc(c.name)}</h1><p>${esc(c.phone||'Sin teléfono')} · Desde ${date(c.createdAt)}${c.archivedAt?' · Archivado':''}</p></div></div><div class="buttons">${button('Editar ficha','edit-client','','file',`data-id="${esc(id)}"`)}${!c.archivedAt?button(partner?'Nuevo aporte':'Nuevo préstamo','new-loan','primary','plus',`data-id="${esc(id)}"`):''}</div></div>`+stats([{label:partner?'Capital aportado':'Capital desembolsado',value:money(t.principal),icon:'wallet',foot:`${ls.length} ${partner?'aporte':'préstamo'}${ls.length!==1?'s':''} registrado${ls.length!==1?'s':''}`},{label:'Capital pendiente',value:money(t.balance),icon:'clock',foot:partner?'Capital por devolver':'Capital por recuperar'},{label:partner?'Intereses pagados':'Intereses recibidos',value:money(t.interest),icon:'up',foot:'Distribuidos por cuota'}])+`<div class="detail-grid"><div class="detail-cards">${ls.map((l,i)=>{const a=state(l);return `<section class="panel"><div class="loan-summary"><div class="loan-top"><div><strong>${partner?'Aporte':'Préstamo'} ${String(data.loans.filter(x=>x.clientId===id).findIndex(x=>x.id===l.id)+1).padStart(2,'0')}</strong><small>${partner?'Recibido el':'Desembolsado el'} ${date(l.start)}</small></div>${badge(l)}</div><div class="loan-numbers"><div><small>MONTO INICIAL</small><strong>${money(l.principal)}</strong></div><div><small>CAPITAL PENDIENTE</small><strong>${money(a.balance)}</strong></div><div><small>CUOTA MENSUAL</small><strong>${money(installment(l.principal,l.rate,l.months,l.interestMode))}</strong></div></div><div class="progress"><span style="width:${a.paidPrincipal/l.principal*100}%"></span></div><div class="progress-label"><span>${Math.round(a.paidPrincipal/l.principal*100)}% del capital ${partner?'devuelto':'recuperado'}</span><span>${l.months} cuotas · ${l.rate}% mensual</span></div><div class="loan-alert"><span>Pendiente a hoy <b>${money(a.amountDue)}</b></span><span>Total pendiente <b>${money(a.remainingTotal)}</b></span></div><p class="method-label">${l.interestMode==='flat'?'Interés fijo sobre el capital inicial.':'Plan anterior con interés sobre saldo.'} ${esc(l.note)}</p><div class="loan-actions">${!c.archivedAt&&a.remainingTotal?button(partner?'Registrar pago al socio':'Registrar abono','new-payment','primary','plus',`data-id="${esc(l.id)}"`):''}${button('Ver cuotas','schedule','','calendar',`data-id="${esc(l.id)}"`)}${!c.archivedAt?button(partner?'Editar aporte':'Editar crédito','edit-loan','ghost','',`data-id="${esc(l.id)}"`):''}${button(partner?'Eliminar aporte':'Eliminar crédito','delete-loan','danger','',`data-id="${esc(l.id)}"`)}</div></div></section>`;}).join('')||`<section class="panel">${empty('Su historia empieza aquí',`Agrega el primer ${credit} de esta ficha.`)}</section>`}<section class="panel"><div class="panel-heading"><div><h2>${partner?'Historial de pagos al socio':'Historial de abonos'}</h2><p>Capital e intereses aplicados por fecha.</p></div><span class="tag">${ps.filter(p=>!p.reversed).length} abono${ps.filter(p=>!p.reversed).length!==1?'s':''}</span></div>${ps.length?paymentsTable(ps,false):empty('Todavía no hay pagos',partner?'Registra el primer pago que hagas.':'Registra el primer pago cuando lo recibas.')}</section></div><aside class="panel" style="align-self:start"><div class="panel-heading"><h2>Datos del ${personLabel}</h2></div><div class="info-list"><div><small>NOMBRE COMPLETO</small><p>${esc(c.name)}</p></div><div><small>TELÉFONO</small><p>${esc(c.phone||'Sin registrar')}</p></div><div><small>OBSERVACIONES</small><p>${esc(c.note||'Sin observaciones.')}</p></div><div><small>ESTADO</small>${clientBadge(c)}</div><div class="client-controls">${button(c.archivedAt?`Restaurar ${personLabel}`:`Archivar ${personLabel}`,c.archivedAt?'restore-client':'archive-client','','',`data-id="${esc(id)}"`)}${button(`Eliminar ${personLabel}`,'delete-client','danger','',`data-id="${esc(id)}"`)}</div></div><div class="financial-note">Archivar pausa los nuevos registros y conserva el historial en esta ficha. Restaurar la incluye de nuevo en los totales. Eliminar borra la ficha y sus registros.</div></aside></div>`;}
+  const ls=recentLoans(data.loans.filter(l=>l.clientId===id)),t=totals(ls),ps=data.payments.filter(p=>ls.some(l=>l.id===p.loanId));return `<button type="button" class="back" data-action="${peoplePage(c)}">${icon('back')} Volver a ${peoplePage(c)}</button><div class="page-heading"><div class="client-head"><span class="person-avatar">${esc(initials(c.name))}</span><div><div class="eyebrow">${partner?'FICHA DEL SOCIO':'HOJA DE VIDA DEL CLIENTE'}</div><h1>${esc(c.name)}</h1><p>${esc(c.phone||'Sin teléfono')} · Desde ${date(c.createdAt)}${c.archivedAt?' · Archivado':''}</p></div></div><div class="buttons">${button('Editar ficha','edit-client','','file',`data-id="${esc(id)}"`)}${!c.archivedAt?button(partner?'Nuevo aporte':'Nuevo préstamo','new-loan','primary','plus',`data-id="${esc(id)}"`):''}</div></div>`+stats([{label:partner?'Capital aportado':'Capital desembolsado',value:money(t.principal),icon:'wallet',foot:`${ls.length} ${partner?'aporte':'préstamo'}${ls.length!==1?'s':''} registrado${ls.length!==1?'s':''}`},{label:'Capital pendiente',value:money(t.balance),icon:'clock',foot:partner?'Capital por devolver':'Capital por recuperar'},{label:partner?'Intereses pagados':'Intereses recibidos',value:money(t.interest),icon:'up',foot:'Distribuidos por cuota'}])+`<div class="detail-grid"><div class="detail-cards">${ls.map((l,i)=>{const a=state(l);return `<section class="panel"><div class="loan-summary"><div class="loan-top"><div><strong>${partner?'Aporte':'Préstamo'} ${String(data.loans.filter(x=>x.clientId===id).findIndex(x=>x.id===l.id)+1).padStart(2,'0')}</strong><small>${partner?'Recibido el':'Desembolsado el'} ${date(l.start)}</small></div>${badge(l)}</div><div class="loan-numbers"><div><small>MONTO INICIAL</small><strong>${money(l.principal)}</strong></div><div><small>CAPITAL PENDIENTE</small><strong>${money(a.balance)}</strong></div><div><small>CUOTA MENSUAL</small><strong>${money(installment(l.principal,l.rate,l.months,l.interestMode))}</strong></div></div><div class="progress"><span style="width:${a.paidPrincipal/l.principal*100}%"></span></div><div class="progress-label"><span>${Math.round(a.paidPrincipal/l.principal*100)}% del capital ${partner?'devuelto':'recuperado'}</span><span>${l.months} cuotas · ${l.rate}% mensual</span></div><div class="loan-alert"><span>Pendiente a hoy <b>${money(a.amountDue)}</b></span><span>Total pendiente <b>${money(a.remainingTotal)}</b></span></div><p class="method-label">${l.interestMode==='flat'?'Interés fijo sobre el capital inicial.':'Plan anterior con interés sobre saldo.'} ${esc(l.note)}</p><div class="loan-actions">${!c.archivedAt&&a.remainingTotal?button(partner?'Registrar pago al socio':'Registrar abono','new-payment','primary','plus',`data-id="${esc(l.id)}"`):''}${button('Ver cuotas','schedule','','calendar',`data-id="${esc(l.id)}"`)}${!c.archivedAt?button(partner?'Editar aporte':'Editar crédito','edit-loan','ghost','',`data-id="${esc(l.id)}"`):''}${button(partner?'Eliminar aporte':'Eliminar crédito','delete-loan','danger','',`data-id="${esc(l.id)}"`)}</div></div></section>`;}).join('')||`<section class="panel">${empty('Su historia empieza aquí',`Agrega el primer ${credit} de esta ficha.`)}</section>`}<section class="panel"><div class="panel-heading"><div><h2>${partner?'Historial de pagos al socio':'Historial de abonos'}</h2><p>Capital e intereses aplicados por fecha.</p></div><span class="tag">${ps.filter(p=>!p.reversed).length} abono${ps.filter(p=>!p.reversed).length!==1?'s':''}</span></div>${ps.length?paymentsTable(ps,false):empty('Todavía no hay pagos',partner?'Registra el primer pago que hagas.':'Registra el primer pago cuando lo recibas.')}</section></div><aside class="panel" style="align-self:start"><div class="panel-heading"><h2>Datos del ${personLabel}</h2></div><div class="info-list"><div><small>NOMBRE COMPLETO</small><p>${esc(c.name)}</p></div><div><small>${partner?'TELÉFONO':'CELULAR'}</small><p>${esc(c.phone||'Sin registrar')}</p></div>${partner?'':clientDetailRows(c.details)}<div><small>OBSERVACIONES</small><p>${esc(c.note||'Sin observaciones.')}</p></div><div><small>ESTADO</small>${clientBadge(c)}</div><div class="client-controls">${button(c.archivedAt?`Restaurar ${personLabel}`:`Archivar ${personLabel}`,c.archivedAt?'restore-client':'archive-client','','',`data-id="${esc(id)}"`)}${button(`Eliminar ${personLabel}`,'delete-client','danger','',`data-id="${esc(id)}"`)}</div></div><div class="financial-note">Archivar pausa los nuevos registros y conserva el historial en esta ficha. Restaurar la incluye de nuevo en los totales. Eliminar borra la ficha y sus registros.</div></aside></div>`;}
 function nameForm(){return `<form id="profile-form">${field('preferredName','¿Cómo quieres que te llame?',input('preferredName',`required maxlength="40" autocomplete="nickname" value="${esc(profile?.preferred_name||'')}" placeholder="Tu nombre preferido"`))}<p class="method-label">Este nombre aparecerá en tu saludo y en tu perfil.</p><div id="form-error"></div><button type="submit" class="btn primary">Guardar mi nombre</button></form>`;}
 function customerView(){return heading(`Hola, ${esc(displayName())}`,'Bienvenido a Crispy Crédito.','','TU CUENTA DE CLIENTE')+`<section class="panel"><div class="panel-heading"><h2>Tu espacio de cliente</h2><span class="badge blue">Cuenta creada</span></div><div class="settings-body"><p>Tu acceso está listo. La consulta de préstamos e historial de cliente estará disponible en una próxima actualización.</p><p>Tu cuenta todavía no está vinculada a una ficha de cliente. Crear una cuenta no enlaza ni muestra registros financieros automáticamente.</p>${button('Personalizar mi nombre','my-space','primary')}${button('Cerrar sesión','logout','ghost')}</div></section>`;}
 function customerSettings(){return heading('Mi espacio','Tu nombre y tu acceso.','','CONFIGURACIÓN')+`<section class="panel"><div class="panel-heading"><h2>Tu cuenta de cliente</h2></div><div class="settings-body"><p>${esc(user.email)}</p>${nameForm()}${button('Cerrar sesión','logout','ghost')}</div></section>`;}
@@ -64,7 +65,89 @@ function closeModal(){if(!busy)$('#modal').close();}
 const field=(id,label,html,full=false)=>`<div class="field ${full?'full':''}"><label for="${id}">${label}</label>${html}</div>`;
 const input=(name,attrs='')=>`<input id="${name}" name="${name}" ${attrs}>`;
 const actions=label=>`<div id="form-error"></div><div class="form-actions">${button('Cancelar','close')}<button class="btn primary" type="submit">${icon('check')}${label}</button></div>`;
-function clientForm(id,kind='client'){const c=client(id),partner=c?isPartner(c):kind==='partner';modal(c?'Editar ficha':partner?'Nuevo socio':'Nuevo cliente',partner?'Organiza los datos del socio y sus aportes.':'Organiza los datos del cliente y sus préstamos.',`<form id="client-form" data-id="${esc(id||'')}" data-kind="${partner?'partner':'client'}"><div class="form-grid">${field('name','Nombre completo *',input('name',`required maxlength="100" autocomplete="name" placeholder="Ej. Laura Gómez" value="${esc(c?.name||'')}"`),true)}${field('phone','Teléfono',input('phone',`type="tel" maxlength="30" autocomplete="tel" placeholder="Ej. 300 123 4567" value="${esc(c?.phone||'')}"`),true)}${field('note','Observaciones',`<textarea id="note" name="note" maxlength="1000">${esc(c?.note||'')}</textarea>`,true)}</div>${actions(c?'Guardar cambios':partner?'Agregar socio':'Agregar cliente')}</form>`);}
+function clientDetailRows(details = {}) {
+  const { inComplex, birthDate, age, ...texts } = details;
+  const entries = [
+    ['Fecha de nacimiento', birthDate && date(birthDate)],
+    ['Edad', ageAt(birthDate) ?? age],
+    ['Vive en conjunto', inComplex ? 'Sí' : ''],
+    ...Object.entries(CLIENT_DETAIL_FIELDS).map(([key, { label }]) => [label, texts[key]])
+  ];
+  return entries.filter(([, value]) => value != null && value !== '')
+    .map(([label, value]) => `<div><small>${label}</small><p>${esc(value)}</p></div>`).join('');
+}
+
+function clientDetailFields(details = {}) {
+  const textField = (key, attrs = '', full = false) => {
+    const { label, max } = CLIENT_DETAIL_FIELDS[key];
+    return field(key, label, input(key, `maxlength="${max}" value="${esc(details[key] ?? '')}" ${attrs}`), full);
+  };
+  const automaticAge = ageAt(details.birthDate);
+  return `${textField('documentNumber', 'inputmode="numeric"')}
+    ${field('birthDate', 'Fecha de nacimiento', input('birthDate', `type="date" min="${EARLIEST_BIRTH_DATE}" max="${today()}" autocomplete="bday" value="${esc(details.birthDate ?? '')}"`))}
+    ${field('age', 'Edad', input('age', `type="number" min="0" max="${MAX_MANUAL_AGE}" step="1" aria-describedby="age-help" value="${automaticAge ?? details.age ?? ''}" ${automaticAge !== null ? 'readonly' : ''}`) +
+      '<small id="age-help">Se calcula con la fecha de nacimiento.</small>')}
+    ${textField('maritalStatus', 'placeholder="Ej. Soltero/a"')}
+    ${textField('occupation', '', true)}
+    ${textField('disbursementAccount', 'placeholder="Ej. Banco y número de cuenta"', true)}
+    ${textField('address', 'autocomplete="street-address"', true)}
+    <div class="field full"><label class="check-line" for="inComplex">
+      ${input('inComplex', `type="checkbox" aria-controls="complex-fields" ${details.inComplex ? 'checked' : ''}`)}
+      Vive en conjunto
+    </label></div>
+    <div id="complex-fields" class="form-grid full" ${details.inComplex ? '' : 'hidden'}>
+      ${textField('complexName', details.inComplex ? '' : 'disabled')}
+      ${textField('unit', details.inComplex ? '' : 'disabled')}
+    </div>
+    ${textField('neighborhood')}
+    ${textField('city', 'autocomplete="address-level2"')}`;
+}
+
+function clientForm(id, kind = 'client') {
+  const c = client(id), partner = c ? isPartner(c) : kind === 'partner';
+  modal(c ? 'Editar ficha' : partner ? 'Nuevo socio' : 'Nuevo cliente',
+    partner ? 'Organiza los datos del socio y sus aportes.' : 'Organiza los datos del cliente y sus préstamos.',
+    `<form id="client-form" data-id="${esc(id || '')}" data-kind="${partner ? 'partner' : 'client'}">
+      <div class="form-grid">
+        ${field('name', 'Nombre completo *', input('name', `required maxlength="100" autocomplete="name" placeholder="Ej. Laura Gómez" value="${esc(c?.name || '')}"`), true)}
+        ${field('phone', partner ? 'Teléfono' : 'Celular', input('phone', `type="tel" maxlength="30" autocomplete="tel" placeholder="Ej. 300 123 4567" value="${esc(c?.phone || '')}"`), true)}
+        ${partner ? '' : clientDetailFields(c?.details)}
+        ${field('note', 'Observaciones', `<textarea id="note" name="note" maxlength="1000">${esc(c?.note || '')}</textarea>`, true)}
+      </div>${actions(c ? 'Guardar cambios' : partner ? 'Agregar socio' : 'Agregar cliente')}
+    </form>`);
+}
+
+function updateClientDetails({ target }) {
+  const form = target.form;
+  if (form?.id !== 'client-form' || form.dataset.kind !== 'client') return;
+  if (target.id === 'inComplex') {
+    form.querySelector('#complex-fields').hidden = !target.checked;
+    form.elements.complexName.disabled = form.elements.unit.disabled = !target.checked;
+  }
+  if (target.id === 'birthDate') {
+    const age = form.elements.age;
+    const calculated = ageAt(target.value);
+    if (calculated !== null) {
+      if (!age.readOnly) age.dataset.manual = age.value;
+      age.value = calculated;
+    } else if (age.readOnly) {
+      age.value = age.dataset.manual ?? '';
+    }
+    age.readOnly = calculated !== null;
+  }
+}
+
+function readClientDetails(values) {
+  const details = {};
+  for (const key of Object.keys(CLIENT_DETAIL_FIELDS)) {
+    const value = values[key]?.trim();
+    if (value) details[key] = value;
+  }
+  if (values.inComplex) details.inComplex = true;
+  if (values.birthDate) details.birthDate = values.birthDate;
+  else if (values.age) details.age = Number(values.age);
+  return details;
+}
 function loanForm(clientId,editId=null){
   const existing=editId?loan(editId):null;if(editId&&!existing){toast('No encontramos ese crédito.');return;}
   const partner=isPartner(client(existing?.clientId||clientId));
@@ -180,7 +263,7 @@ function deleteLoanDialog(id){const l=loan(id);if(!l)return;const ps=data.paymen
 function download(text,name,type){const u=URL.createObjectURL(new Blob([text],{type})),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);}
 function exportData(){download(JSON.stringify(data,null,2),`crispy-credito-respaldo-${today()}.json`,'application/json');toast('Respaldo descargado.');}
 function exportCsv(){const quote=v=>'"'+String(v).replace(/"/g,'""')+'"',safe=v=>typeof v==='string'&&/^[=+@\-\t\r]/.test(v)?"'"+v:v;const rows=[['Fecha','Cliente','Capital COP','Intereses COP','Mora COP','Total COP','Dias atraso al pagar','Medio','Estado','Nota'],...activePayments().map(p=>{const r=receiptFor(p);return[p.date,client(loan(p.loanId).clientId).name,r?.capital??'',r?.interest??'',r?.late??'',p.amount,r?.daysLate??'',p.method,p.reversed?'Anulado':'Registrado',p.note];})];download('\uFEFF'+rows.map(r=>r.map(v=>quote(safe(v))).join(';')).join('\r\n'),`crispy-credito-movimientos-${today()}.csv`,'text/csv;charset=utf-8');}
-async function mutate(change){if(busy)throw Error('Hay un guardado en curso.');if(!user||profile?.role!=='admin')throw Error('Esta acción requiere una cuenta administradora.');busy=true;$('#sync-status').innerHTML='<span></span> Guardando…';try{const next=structuredClone(data);change(next);next.version=4;const validated=validateWorkspace(next),saved=await backend.saveWorkspace(validated,revision);data=validateWorkspace(saved.payload);revision=saved.revision;cache.clear();$('#sync-status').innerHTML='<span></span> Guardado en línea';return true;}finally{busy=false;if($('#sync-status').textContent.includes('Guardando'))$('#sync-status').innerHTML='<span></span> Revisa el guardado';}}
+async function mutate(change){if(busy)throw Error('Hay un guardado en curso.');if(!user||profile?.role!=='admin')throw Error('Esta acción requiere una cuenta administradora.');busy=true;$('#sync-status').innerHTML='<span></span> Guardando…';try{const next=structuredClone(data);next.version=WORKSPACE_VERSION;change(next);const validated=validateWorkspace(next),saved=await backend.saveWorkspace(validated,revision);data=validateWorkspace(saved.payload);revision=saved.revision;cache.clear();$('#sync-status').innerHTML='<span></span> Guardado en línea';return true;}finally{busy=false;if($('#sync-status').textContent.includes('Guardando'))$('#sync-status').innerHTML='<span></span> Revisa el guardado';}}
 async function reloadData(){profile=await backend.loadProfile();if(profile.role!=='admin'){clearWorkspace();render();return;}if(busy)throw Error('Espera a que termine el guardado.');const saved=await backend.loadWorkspace();data=validateWorkspace(saved.payload);revision=saved.revision;cache.clear();render();$('#sync-status').innerHTML='<span></span> Actualizado';}
 function errorMessage(e){return e?.message||'No pudimos completar la acción.';}
 function showError(e){if($('#modal').open&&$('#form-error'))$('#form-error').innerHTML=`<div class="form-error" role="alert">${esc(errorMessage(e))}${e.conflict?'<br><button type="button" class="btn small" data-action="reload-after-conflict">Recargar registros</button>':''}</div>`;else toast(errorMessage(e));}
@@ -229,20 +312,33 @@ document.addEventListener('click',async e=>{const el=e.target.closest('[data-act
     amount.value=formatCOP(Number(el.dataset.value));
     amount.setCustomValidity('');
     updatePaymentSummary();
-  },schedule:()=>showSchedule(id),export:exportData,csv:exportCsv,'payment-detail':()=>showPayment(id),filter:()=>{filter=el.dataset.value;render();},import:()=>$('#import-file').click(),logout,reload:async()=>{await reloadData();toast('Registros actualizados.');},'reload-after-conflict':async()=>{await reloadData();closeModal();toast('Registros actualizados. Vuelve a ingresar el cambio.');},'archive-client':()=>confirmArchive(id),'restore-client':()=>confirmArchive(id,true),'delete-client':()=>deleteClientDialog(id),'confirm-archive':async()=>{await mutate(d=>archiveClient(d,id,true));closeModal();render();toast('Ficha archivada. Su historial se conserva.');},'confirm-restore':async()=>{await mutate(d=>archiveClient(d,id,false));closeModal();render();toast('Ficha restaurada.');},reverse:()=>confirmDialog('¿Anular este abono?','Se conserva el registro y se recalculan los saldos y pagos posteriores.','confirm-reverse','Sí, anular',`data-id="${esc(id)}"`),'confirm-reverse':async()=>{await mutate(d=>{const p=d.payments.find(p=>p.id===id);if(!p||client(loan(p.loanId).clientId).archivedAt)throw Error('Restaura la ficha para anular pagos.');p.reversed=true;});closeModal();render();toast('Abono anulado e historial recalculado.');},'confirm-import':async()=>{await mutate(d=>Object.assign(d,pendingImport));pendingImport=null;closeModal();render();toast('Respaldo importado.');}};
+  },schedule:()=>showSchedule(id),export:exportData,csv:exportCsv,'payment-detail':()=>showPayment(id),filter:()=>{filter=el.dataset.value;render();},import:()=>$('#import-file').click(),logout,reload:async()=>{await reloadData();toast('Registros actualizados.');},'reload-after-conflict':async()=>{await reloadData();closeModal();toast('Registros actualizados. Vuelve a ingresar el cambio.');},'archive-client':()=>confirmArchive(id),'restore-client':()=>confirmArchive(id,true),'delete-client':()=>deleteClientDialog(id),'confirm-archive':async()=>{await mutate(d=>archiveClient(d,id,true));closeModal();render();toast('Ficha archivada. Su historial se conserva.');},'confirm-restore':async()=>{await mutate(d=>archiveClient(d,id,false));closeModal();render();toast('Ficha restaurada.');},reverse:()=>confirmDialog('¿Anular este abono?','Se conserva el registro y se recalculan los saldos y pagos posteriores.','confirm-reverse','Sí, anular',`data-id="${esc(id)}"`),'confirm-reverse':async()=>{await mutate(d=>{const p=d.payments.find(p=>p.id===id);if(!p||client(loan(p.loanId).clientId).archivedAt)throw Error('Restaura la ficha para anular pagos.');p.reversed=true;});closeModal();render();toast('Abono anulado e historial recalculado.');},'confirm-import':async()=>{await mutate(d=>Object.assign(d,pendingImport,{version:WORKSPACE_VERSION}));pendingImport=null;closeModal();render();toast('Respaldo importado.');}};
   try{await handlers[a]?.();}catch(err){showError(err);}
 });
+document.addEventListener('input', updateClientDetails);
+document.addEventListener('change', updateClientDetails);
 document.addEventListener('input',e=>{handleMoneyInput(e);if(e.target.id==='search'){query=e.target.value;const pos=e.target.selectionStart;render();$('#search').focus();$('#search').setSelectionRange(pos,pos);}if(e.target.closest('#loan-form'))updateSimulation();if(e.target.closest('#payment-form'))updatePaymentSummary();});
 document.addEventListener('change',async e=>{if(e.target.closest('#loan-form')){updateLoanDates();updateSimulation();}if(e.target.closest('#payment-form'))updatePaymentSummary();if(e.target.id!=='import-file'||!user)return;const file=e.target.files[0];if(!file)return;try{if(file.size>5e6)throw Error('El respaldo debe pesar menos de 5 MB.');pendingImport=validateWorkspace(JSON.parse(await file.text()),{allowLegacy:true});confirmDialog('¿Importar este respaldo?',`${pendingImport.clients.length} clientes, ${pendingImport.loans.length} préstamos y ${pendingImport.payments.length} abonos. Reemplazará tu cartera completa. Descarga primero un respaldo si quieres conservarla.`,'confirm-import','Sí, reemplazar e importar');}catch(err){toast(errorMessage(err));}e.target.value='';});
 document.addEventListener('submit',async e=>{const f=e.target;if(!f.id)return;e.preventDefault();if(['login-form','reset-form','password-form','signup-form'].includes(f.id)){await authSubmit(f);return;}if(!user||busy)return;if(f.id==='profile-form'){const submit=f.querySelector('[type="submit"]');submit.disabled=true;try{profile=await backend.saveProfile(f.elements.preferredName.value);render();toast('Tu nombre quedó guardado.');}catch(err){const target=f.querySelector('#form-error');if(target)target.textContent=errorMessage(err);}finally{if(submit.isConnected)submit.disabled=false;}return;}if(profile?.role!=='admin')return;const submit=f.querySelector('[type="submit"]');submit.disabled=true;try{const v=Object.fromEntries(new FormData(f));let destination=location.hash.slice(1)||'inicio';
-  if(f.id==='client-form'){const id=f.dataset.id||uid();await mutate(d=>{const c=d.clients.find(c=>c.id===id);if(!v.name.trim())throw Error('Escribe el nombre de la persona.');if(c)Object.assign(c,{name:v.name.trim(),phone:v.phone.trim(),note:v.note.trim()});else d.clients.push({id,name:v.name.trim(),phone:v.phone.trim(),note:v.note.trim(),createdAt:today(),archivedAt:null,...(f.dataset.kind==='partner'?{kind:'partner'}:{})});});destination='cliente/'+id;}
+  if (f.id === 'client-form') {
+    const id = f.dataset.id || uid();
+    const fields = { name: v.name.trim(), phone: v.phone.trim(), note: v.note.trim() };
+    if (!fields.name) throw Error('Escribe el nombre de la persona.');
+    if (f.dataset.kind === 'client') fields.details = readClientDetails(v);
+    await mutate(d => {
+      const c = d.clients.find(c => c.id === id);
+      if (c) Object.assign(c, fields);
+      else d.clients.push({ id, ...fields, createdAt: today(), archivedAt: null,
+        ...(f.dataset.kind === 'partner' ? { kind: 'partner' } : {}) });
+    });
+    destination = 'cliente/' + id;
+  }
   else if(f.id==='loan-form'){
     const existing=f.dataset.id?loan(f.dataset.id):null,c=client(v.clientId);
     if(!c||c.archivedAt||(c.kind??'client')!==f.dataset.kind||client(existing?.clientId)?.archivedAt)throw Error('Selecciona una ficha activa del tipo correcto.');
     const flat=usesFlatInterest(f);
     const values={clientId:v.clientId,principal:parseCOP(v.principal),rate:+v.rate,lateRate:flat?0:existing.lateRate,months:+v.months,start:v.start,note:v.note.trim(),firstDueDate:v.customDates?v.firstDueDate:null,...(flat?{interestMode:'flat'}:{})};
     await mutate(d=>{
-      d.version=4;
       if(existing){editLoan(d,existing.id,values);return;}
       const l={id:uid(),...values,createdAt:new Date().toISOString()};
       if(!l.firstDueDate)delete l.firstDueDate;
