@@ -1,10 +1,12 @@
-# Crispy Crédito · versión 2.5
+# Crispy Crédito · versión 2.6
 
 App personal para clientes, préstamos y abonos, con acceso separado para administradores y clientes. Colores verde y blanco, azul y pequeños acentos naranjas.
 
 Empieza por **EMPIEZA_AQUI.md**. Ejecuta **ACTUALIZAR_APP.sql** de este paquete en Supabase y después sube el código a GitHub.
 
 ## Cambios de esta versión
+
+- La ficha de clientes incluye datos personales, laborales, bancarios y de residencia. La fecha de nacimiento calcula la edad y la casilla **Vive en conjunto** muestra los campos de conjunto, torre y apartamento.
 
 - El formulario de pago de clientes y socios permite aplicar un importe a capital, a intereses o a ambos. La selección se conserva con cada pago y el saldo combinado se puede cargar desde el formulario.
 

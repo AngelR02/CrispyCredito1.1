@@ -1,8 +1,12 @@
-# Actualización 2.5 de Crispy Crédito
+# Actualización 2.6 de Crispy Crédito
 
 1. En la app actual, descarga un respaldo desde **Mi espacio → Descargar respaldo**.
 2. En Supabase, abre **SQL Editor → New query** y ejecuta completo **ACTUALIZAR_APP.sql**, el archivo de este ZIP. El SQL habilita el guardado del nuevo formato de cartera y conserva tus registros.
 3. Reemplaza la carpeta **crispy-credito** en GitHub. Guarda los cambios, espera el despliegue de Vercel y vuelve a abrir la app.
+
+## Ficha de clientes
+
+Abre **Clientes → Nuevo cliente** o **Editar ficha**. Puedes agregar cédula, fecha de nacimiento, edad, estado civil, celular, cuenta a desembolsar, dirección, barrio, ciudad y trabajo. Solo el nombre es obligatorio. Al ingresar la fecha de nacimiento, se calcula la edad. Marca **Vive en conjunto** para registrar el nombre, la torre y el apartamento.
 
 ## Cómo aplicar un pago
 

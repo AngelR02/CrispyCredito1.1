@@ -67,9 +67,9 @@ exception when others then return false;
 end $$;
 
 create or replace function crispy_private.cc_validate_payload(d jsonb) returns void language plpgsql security invoker set search_path='' as $$
-declare c jsonb; l jsonb; p jsonb; x jsonb; k text; n numeric; id_count bigint; distinct_count bigint;
+declare details jsonb; field_limit record; c jsonb; l jsonb; p jsonb; x jsonb; k text; n numeric; id_count bigint; distinct_count bigint;
 begin
-  if jsonb_typeof(d) is distinct from 'object' or coalesce(d->>'version','') not in ('2','3','4') or octet_length(d::text)>5000000 then raise exception 'Formato inválido'; end if;
+  if jsonb_typeof(d) is distinct from 'object' or coalesce(d->>'version','') not in ('2','3','4','5') or octet_length(d::text)>5000000 then raise exception 'Formato inválido'; end if;
   foreach k in array array['clients','loans','payments'] loop
     if jsonb_typeof(d->k) is distinct from 'array' or jsonb_array_length(d->k)>20000 then raise exception 'Colección inválida'; end if;
   end loop;
@@ -80,12 +80,48 @@ begin
   end loop;
   for c in select value from jsonb_array_elements(d->'clients') loop
     if jsonb_typeof(c->'name') is distinct from 'string' or length(trim(c->>'name')) not between 1 and 100 or jsonb_typeof(c->'phone') is distinct from 'string' or length(c->>'phone')>30 or not crispy_private.cc_valid_date(c->>'createdAt') then raise exception 'Cliente inválido'; end if;
-    if c ? 'kind' and ((d->>'version') not in ('3','4') or (c->>'kind') is distinct from 'partner') then raise exception 'Tipo de ficha inválido'; end if;
+    if c ? 'kind' and ((d->>'version') not in ('3','4','5') or (c->>'kind') is distinct from 'partner') then raise exception 'Tipo de ficha inválido'; end if;
+    if c ? 'details' then
+      details := c->'details';
+      if d->>'version' <> '5' or c ? 'kind' or jsonb_typeof(details) is distinct from 'object' then
+        raise exception 'Datos adicionales de cliente inválidos';
+      end if;
+      if details - array['documentNumber','maritalStatus','disbursementAccount','address','complexName','unit',
+                         'neighborhood','city','occupation','inComplex','birthDate','age'] <> '{}'::jsonb then
+        raise exception 'Campo adicional de cliente inválido';
+      end if;
+      for field_limit in select * from (values
+        ('documentNumber',40),('maritalStatus',40),('disbursementAccount',120),('address',180),
+        ('complexName',120),('unit',80),('neighborhood',100),('city',100),('occupation',120)
+      ) as limits(key,max_length) loop
+        if details ? field_limit.key and (
+          jsonb_typeof(details->field_limit.key) is distinct from 'string' or
+          length(details->>field_limit.key)>field_limit.max_length
+        ) then raise exception 'Texto de ficha inválido'; end if;
+      end loop;
+      if (details ? 'inComplex' and jsonb_typeof(details->'inComplex') is distinct from 'boolean')
+        or ((details ? 'complexName' or details ? 'unit') and details->'inComplex' is distinct from 'true'::jsonb) then
+        raise exception 'Datos del conjunto inválidos';
+      end if;
+      if details ? 'birthDate' then
+        if jsonb_typeof(details->'birthDate') is distinct from 'string' or
+          (details->>'birthDate') !~ '^\d{4}-\d{2}-\d{2}$' or
+          (details->>'birthDate') < '1900-01-01' or details ? 'age' then
+          raise exception 'Fecha de nacimiento inválida';
+        end if;
+        if (details->>'birthDate')::date > (now() at time zone 'America/Bogota')::date then
+          raise exception 'Fecha de nacimiento inválida';
+        end if;
+      end if;
+      if details ? 'age' and (
+        jsonb_typeof(details->'age') is distinct from 'number' or (details->>'age') !~ '^(0|[1-9][0-9]?|1[0-2][0-9]|130)$'
+      ) then raise exception 'Edad inválida'; end if;
+    end if;
     if not (c ? 'archivedAt') or (c->'archivedAt'<>'null'::jsonb and not crispy_private.cc_valid_date(c->>'archivedAt')) then raise exception 'Archivo inválido'; end if;
   end loop;
   for l in select value from jsonb_array_elements(d->'loans') loop
     if not exists(select 1 from jsonb_array_elements(d->'clients') as client_item(value) where client_item.value->>'id'=l->>'clientId') or not crispy_private.cc_valid_date(l->>'start') then raise exception 'Referencia de préstamo inválida'; end if;
-    if l ? 'interestMode' and ((d->>'version') not in ('3','4') or (l->>'interestMode') is distinct from 'flat' or (l->'lateRate') is distinct from '0'::jsonb) then raise exception 'Plan de interés inválido'; end if;
+    if l ? 'interestMode' and ((d->>'version') not in ('3','4','5') or (l->>'interestMode') is distinct from 'flat' or (l->'lateRate') is distinct from '0'::jsonb) then raise exception 'Plan de interés inválido'; end if;
     if (l->>'interestMode') is distinct from 'flat' and exists(
       select 1 from jsonb_array_elements(d->'clients') as person(value)
       where person.value->>'id'=l->>'clientId' and person.value->>'kind'='partner'
@@ -108,7 +144,7 @@ begin
     n:=(p->>'amount')::numeric;
     if n<=0 or n>1000000000000 or n<>trunc(n) then raise exception 'Valor de abono inválido'; end if;
     if p ? 'application' and (
-      (d->>'version') is distinct from '4' or
+      (d->>'version') not in ('4','5') or
       coalesce(p->>'application','') not in ('capital','interest','both') or
       p ? 'legacySplit'
     ) then
@@ -135,8 +171,9 @@ begin
   select revision,payload->>'version' into current_revision,current_format from public.cc_workspaces where user_id=owner_id for update;
   if not found then raise exception 'Usuario no habilitado' using errcode='42501'; end if;
   if p_expected_revision is null or current_revision<>p_expected_revision then raise exception 'Conflicto de versión' using errcode='40001'; end if;
-  if (current_format='4' and (p_payload->>'version') is distinct from '4')
-    or (current_format='3' and coalesce(p_payload->>'version','') not in ('3','4')) then
+  if (current_format='5' and (p_payload->>'version') is distinct from '5')
+    or (current_format='4' and coalesce(p_payload->>'version','') not in ('4','5'))
+    or (current_format='3' and coalesce(p_payload->>'version','') not in ('3','4','5')) then
     raise exception 'Actualiza la app antes de guardar esta cartera' using errcode='22023';
   end if;
   perform crispy_private.cc_validate_payload(p_payload);
