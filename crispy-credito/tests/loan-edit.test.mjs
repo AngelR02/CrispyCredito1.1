@@ -12,8 +12,8 @@ assert.equal(calculateLoan(loan,[payment],'2026-01-10').receipts[0].late,0);
 assert.equal(calculateLoan(loan,[payment],'2026-01-10').receipts[0].daysLate,0);
 assert.equal(calculateLoan(loan,[payment],'2026-01-10').balance,200000);
 // Even future-disbursement loans remain selectable, so the UI can explain the date.
-assert.equal(loansAcceptingPayments({loans:[{...loan,start:'2026-12-01'}],payments:[]},'2026-01-01').length,1);
-const paid={...payment,amount:300000};assert.equal(loansAcceptingPayments({loans:[loan],payments:[paid]},'2026-01-10').length,0);
+assert.equal(loansAcceptingPayments({clients:[client],loans:[{...loan,start:'2026-12-01'}],payments:[]},'2026-01-01').length,1);
+const paid={...payment,amount:300000};assert.equal(loansAcceptingPayments({clients:[client],loans:[loan],payments:[paid]},'2026-01-10').length,0);
 const sameDay={...payment,date:'2026-01-01'};assert.equal(calculateLoan(loan,[sameDay],'2026-01-01').balance,200000);
 // Edits retain identity and all receipts, and recalculate without a partial mutation.
 editLoan(d,'l',{principal:600000,months:6,firstDueDate:'2026-02-15',note:'Corregido'});
