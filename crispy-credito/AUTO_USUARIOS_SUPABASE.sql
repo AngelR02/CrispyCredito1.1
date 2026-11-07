@@ -72,7 +72,7 @@ end $$;
 create or replace function crispy_private.cc_validate_payload(d jsonb) returns void language plpgsql security invoker set search_path='' as $$
 declare c jsonb; l jsonb; p jsonb; x jsonb; k text; n numeric; id_count bigint; distinct_count bigint;
 begin
-  if jsonb_typeof(d) is distinct from 'object' or (d->>'version') is distinct from '2' or octet_length(d::text)>5000000 then raise exception 'Formato inválido'; end if;
+  if jsonb_typeof(d) is distinct from 'object' or coalesce(d->>'version','') not in ('2','3','4') or octet_length(d::text)>5000000 then raise exception 'Formato inválido'; end if;
   foreach k in array array['clients','loans','payments'] loop
     if jsonb_typeof(d->k) is distinct from 'array' or jsonb_array_length(d->k)>20000 then raise exception 'Colección inválida'; end if;
   end loop;
@@ -83,10 +83,16 @@ begin
   end loop;
   for c in select value from jsonb_array_elements(d->'clients') loop
     if jsonb_typeof(c->'name') is distinct from 'string' or length(trim(c->>'name')) not between 1 and 100 or jsonb_typeof(c->'phone') is distinct from 'string' or length(c->>'phone')>30 or not crispy_private.cc_valid_date(c->>'createdAt') then raise exception 'Cliente inválido'; end if;
+    if c ? 'kind' and ((d->>'version') not in ('3','4') or (c->>'kind') is distinct from 'partner') then raise exception 'Tipo de ficha inválido'; end if;
     if not (c ? 'archivedAt') or (c->'archivedAt'<>'null'::jsonb and not crispy_private.cc_valid_date(c->>'archivedAt')) then raise exception 'Archivo inválido'; end if;
   end loop;
   for l in select value from jsonb_array_elements(d->'loans') loop
     if not exists(select 1 from jsonb_array_elements(d->'clients') as client_item(value) where client_item.value->>'id'=l->>'clientId') or not crispy_private.cc_valid_date(l->>'start') then raise exception 'Referencia de préstamo inválida'; end if;
+    if l ? 'interestMode' and ((d->>'version') not in ('3','4') or (l->>'interestMode') is distinct from 'flat' or (l->'lateRate') is distinct from '0'::jsonb) then raise exception 'Plan de interés inválido'; end if;
+    if (l->>'interestMode') is distinct from 'flat' and exists(
+      select 1 from jsonb_array_elements(d->'clients') as person(value)
+      where person.value->>'id'=l->>'clientId' and person.value->>'kind'='partner'
+    ) then raise exception 'Un aporte requiere interés fijo'; end if;
     if l ? 'firstDueDate' and (jsonb_typeof(l->'firstDueDate') is distinct from 'string' or not crispy_private.cc_valid_date(l->>'firstDueDate') or (l->>'firstDueDate')<=(l->>'start')) then raise exception 'Primera fecha de pago inválida'; end if;
     if l ? 'createdAt' then
       if jsonb_typeof(l->'createdAt') is distinct from 'string' or length(l->>'createdAt')>100 then raise exception 'Fecha de registro inválida'; end if;
@@ -104,6 +110,13 @@ begin
     perform (p->>'createdAt')::timestamptz;
     n:=(p->>'amount')::numeric;
     if n<=0 or n>1000000000000 or n<>trunc(n) then raise exception 'Valor de abono inválido'; end if;
+    if p ? 'application' and (
+      (d->>'version') is distinct from '4' or
+      coalesce(p->>'application','') not in ('capital','interest','both') or
+      p ? 'legacySplit'
+    ) then
+      raise exception 'Aplicación del abono inválida';
+    end if;
     if p ? 'legacySplit' then
       foreach k in array array['capital','interest'] loop
         if jsonb_typeof(p->'legacySplit'->k) is distinct from 'number' then raise exception 'Desglose inválido'; end if;
@@ -118,13 +131,17 @@ end $$;
 -- Solo esta función escribe. Toma la identidad del JWT, nunca de un parámetro del navegador.
 -- Bloqueo y revisión evitan que dos equipos sobrescriban cambios del otro.
 create or replace function crispy_private.cc_save_workspace_internal(p_payload jsonb,p_expected_revision bigint) returns jsonb language plpgsql security definer set search_path='' as $$
-declare owner_id uuid:=auth.uid(); current_revision bigint; updated public.cc_workspaces;
+declare owner_id uuid:=auth.uid(); current_revision bigint; current_format text; updated public.cc_workspaces;
 begin
   if owner_id is null then raise exception 'Acceso no autorizado' using errcode='42501'; end if;
   if not crispy_private.cc_is_admin() then raise exception 'Solo una cuenta administradora puede guardar una cartera' using errcode='42501'; end if;
-  select revision into current_revision from public.cc_workspaces where user_id=owner_id for update;
+  select revision,payload->>'version' into current_revision,current_format from public.cc_workspaces where user_id=owner_id for update;
   if not found then raise exception 'Usuario no habilitado' using errcode='42501'; end if;
   if p_expected_revision is null or current_revision<>p_expected_revision then raise exception 'Conflicto de versión' using errcode='40001'; end if;
+  if (current_format='4' and (p_payload->>'version') is distinct from '4')
+    or (current_format='3' and coalesce(p_payload->>'version','') not in ('3','4')) then
+    raise exception 'Actualiza la app antes de guardar esta cartera' using errcode='22023';
+  end if;
   perform crispy_private.cc_validate_payload(p_payload);
   update public.cc_workspaces set payload=p_payload,revision=current_revision+1,updated_at=now() where user_id=owner_id returning * into updated;
   return jsonb_build_object('payload',updated.payload,'revision',updated.revision,'updated_at',updated.updated_at);

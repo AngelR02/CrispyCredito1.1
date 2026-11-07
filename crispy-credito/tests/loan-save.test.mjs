@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import {schedule,calculateLoan} from '../dist/finance.mjs';
 import {PGlite} from '@electric-sql/pglite';
-import {emptyWorkspace,validateWorkspace,editLoan,deleteLoan} from '../dist/store.mjs';
+import {emptyWorkspace,validateWorkspace,editLoan,deleteLoan,activeLoans,archiveClient,loansAcceptingPayments} from '../dist/store.mjs';
 const db=new PGlite();
 await db.exec(`create schema auth;create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}'::jsonb);create role anon;create role authenticated;grant usage on schema auth to anon,authenticated;create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;`);
 await db.exec(await fs.readFile(new URL('../supabase/01_base_de_datos.sql',import.meta.url),'utf8'));
@@ -53,6 +54,57 @@ const corrected=structuredClone(data);editLoan(corrected,'loan-first-client',{pr
 assert.equal((await save(corrected)).payload.loans.find(l=>l.id==='loan-first-client').principal,1200000);
 deleteLoan(corrected,'loan-first-client',true);
 const removed=await save(corrected);assert.equal(removed.payload.clients.length,data.clients.length);assert.equal(removed.payload.loans.length,data.loans.length-1);assert.equal(removed.payload.payments.length,0);
+// Fixed-interest plans and partner records must round-trip through the same RPC.
+const portfolio=structuredClone(corrected);
+portfolio.version=3;
+portfolio.clients.push({...portfolio.clients[0],id:'partner-a',kind:'partner'});
+const clientPlan={...portfolio.loans[0],id:'flat-client',principal:500000,rate:2,lateRate:0,months:5,start:'2026-01-01',interestMode:'flat'};
+const partnerPlan={...clientPlan,id:'partner-plan',clientId:'partner-a',principal:1000000,rate:1};
+portfolio.loans.push(clientPlan,partnerPlan);
+assert.deepEqual(schedule(clientPlan).map(row=>row.interest),[10000,10000,10000,10000,10000]);
+assert.equal(schedule(clientPlan).at(-1).balance,0);
+portfolio.payments.push({id:'partner-pay',loanId:partnerPlan.id,amount:210000,date:'2026-02-01',method:'Transferencia',note:'',createdAt:'2026-02-01T12:00:00Z',reversed:false});
+const partnerState=calculateLoan(partnerPlan,portfolio.payments,'2026-03-02');
+assert.equal(partnerState.paidInterest,10000);
+assert.equal(partnerState.balance,800000);
+assert.equal(partnerState.lateDue,0);
+assert.deepEqual((await save(portfolio)).payload,portfolio);
+await reject(corrected);
+const invalid=structuredClone(portfolio);
+delete invalid.loans.at(-1).interestMode;
+await reject(invalid);
+archiveClient(portfolio,'client-a',true);
+assert.ok(!activeLoans(portfolio).some(l=>l.clientId==='client-a'));
+assert.ok(!loansAcceptingPayments(portfolio).some(l=>l.clientId==='client-a'));
+assert.equal(activeLoans(portfolio,'partner').length,1);
+assert.ok(portfolio.loans.some(l=>l.id==='flat-client'));
+archiveClient(portfolio,'client-a',false);
+assert.ok(activeLoans(portfolio).some(l=>l.id==='flat-client'));
+// The same payment targets must work for a client and a partner after a save.
+portfolio.version=4;
+const oldPayments=structuredClone(portfolio.payments);
+for(const plan of [clientPlan,partnerPlan]){
+  const before=calculateLoan(plan,portfolio.payments,'2026-03-02');
+  const payment={id:`target-${plan.id}`,loanId:plan.id,amount:5000,date:'2026-03-02',method:'Efectivo',note:'',createdAt:'2026-03-02T12:00:00Z',reversed:false};
+  const capital=calculateLoan(plan,[...portfolio.payments,{...payment,application:'capital'}],'2026-03-02');
+  assert.equal(capital.balance,before.balance-5000);
+  assert.equal(capital.paidInterest,before.paidInterest);
+  const interest=calculateLoan(plan,[...portfolio.payments,{...payment,application:'interest'}],'2026-03-02');
+  assert.equal(interest.balance,before.balance);
+  assert.equal(interest.paidInterest,before.paidInterest+5000);
+  assert.throws(()=>calculateLoan(plan,[...portfolio.payments,{...payment,application:'interest',amount:before.remainingTotal-before.balance+1}],'2026-03-02'),/intereses pendientes/);
+  const full={...payment,application:'both',amount:before.remainingTotal};
+  assert.equal(calculateLoan(plan,[...portfolio.payments,full],'2026-03-02').remainingTotal,0);
+  portfolio.payments.push({...payment,application:plan===clientPlan?'capital':'interest'});
+}
+const stored=await save(portfolio);
+assert.deepEqual(stored.payload,portfolio);
+assert.deepEqual(stored.payload.payments.slice(0,oldPayments.length),oldPayments);
+await reject({...portfolio,version:3});
+const bogusTarget=structuredClone(portfolio);
+bogusTarget.payments.at(-1).application='unknown';
+await reject(bogusTarget);
+assert.throws(()=>validateWorkspace(bogusTarget),/aplicación/i);
 await db.exec(`set request.jwt.claim.sub='${b}'`);
 assert.equal((await db.query('select payload from public.cc_workspaces')).rows[0].payload.loans.length,0);
 await db.exec('set role anon');
