@@ -12,3 +12,86 @@
 .auth-options{justify-content:space-between;gap:15px;flex-wrap:wrap}.auth-options .btn{padding:0}.check-line{display:flex!important;align-items:flex-start;gap:10px;line-height:1.7;cursor:pointer}.check-line input[type="checkbox"]{width:18px;height:18px;min-height:18px;flex:0 0 18px;accent-color:#087754;margin-top:2px}.delete-warning{padding:18px;background:#fff2ec;border:1px solid #f2d9cc;border-radius:10px;margin-bottom:22px;font-size:14px;line-height:1.8;color:#955e48}.delete-warning p{margin-top:8px}#profile-form{margin:24px 0;padding-top:18px;border-top:1px solid #e7ecdf}#profile-form .field{margin-bottom:12px}#profile-form .btn{margin-top:15px}#signup-form+.btn{margin-top:20px}.auth-panel:has(#signup-form){padding-block:45px 60px}#delete-form .btn.danger{background:#a54b36;color:#fff}.row-actions{flex-wrap:wrap}
 
 #delete-loan-form .btn.danger{background:#a54b36;color:#fff}.loan-actions{flex-wrap:wrap}.delete-warning strong{display:block}
+
+/* Paleta de Crispy Crédito */
+:root {
+  --green: #087744;
+  --green-dark: #064d32;
+  --mint: #e5f5e3;
+  --lime: #bfe451;
+  --ink: #172c24;
+  --muted: #586d61;
+  --line: #dce9df;
+  --bg: #f2f8f1;
+  --shadow: 0 4px 14px #073c2510;
+}
+
+.sidebar {
+  background: linear-gradient(160deg, #075337, #04442e);
+  border-color: #075337;
+  color: #fff;
+  overflow-y: auto;
+}
+.sidebar .brand, .sidebar .profile { color: #fff; }
+.sidebar .brand-icon { background: #fff; color: var(--green-dark); }
+.sidebar .brand-icon span { color: var(--green); }
+.sidebar .brand-sub, .sidebar .workspace-label { color: #e1f2dc; }
+.sidebar .workspace-label { margin-top: 25px; }
+.sidebar .nav-item { color: #f0f9ed; }
+.sidebar .nav-item:hover { background: #ffffff17; }
+.sidebar .nav-item.active { background: var(--lime); color: #14351f; }
+.sidebar .nav-item.active:after { background: #255c35; }
+.sidebar .nav-count { background: #ffffff20; color: #f0f9ed; }
+.sidebar .nav-item.active .nav-count { background: #153c271a; color: #14351f; }
+.sidebar-bottom { padding-top: 15px; }
+.sidebar .side-note {
+  background: #ffffff0b;
+  border-color: #ffffff27;
+  padding-block: 10px;
+  margin-bottom: 12px;
+}
+.sidebar .spark { color: var(--lime); line-height: 1; margin-bottom: 4px; }
+.sidebar .side-note p { line-height: 1.45; }
+.sidebar .side-note p, .sidebar .profile small, .sidebar .profile-arrow, .sidebar .logout { color: #d5e8d6; }
+.sidebar .profile { border-top-color: #ffffff32; }
+.sidebar .avatar { background: #d4efbf; color: var(--green-dark); }
+.sidebar a:focus-visible, .sidebar button:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+.sidebar-logo {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: clamp(76px, calc(100dvh - 640px), 132px);
+  object-fit: contain;
+  margin: 9px auto 0;
+}
+
+.breadcrumb strong { color: var(--green-dark); }
+.top-avatar { background: #d8efc8; color: var(--green-dark); }
+.private-pill span { background: #07894a; }
+.content:has(> .hero) > .page-heading {
+  background: #e5f4e0;
+  box-shadow: 0 0 0 10px #e5f4e0;
+  border-radius: 5px;
+}
+.page-heading p, .stat-top, .stat-foot, .panel-heading p { color: var(--muted); }
+.hero, .auth-art { background: linear-gradient(123deg, #087144, #06492f 72%, #087741); }
+.hero:before { border-color: #c6f38129; box-shadow: 0 0 0 45px #8dd3510d, 0 0 0 90px #8dd3510a, 0 0 0 135px #8dd35108; }
+.hero:after { background: #b6ed5130; }
+.hero .eyebrow { color: #edf7e8; text-transform: uppercase; }
+.hero h2 span, .auth-art h1 span { color: #c8eb72; }
+.hero p, .hero-chip, .hero-summary .hero-label, .hero-summary small { color: #e2f3e4; }
+.hero-chip i { background: var(--lime); }
+.hero-summary { border-color: #d3f1cc5c; }
+.auth-art .eyebrow, .auth-art .brand-sub, .auth-art p, .auth-art > small { color: #e0f0df; }
+.auth-lock { background: var(--mint); color: var(--green); }
+.auth-description, .auth-caption { color: var(--muted); }
+.stat-icon { background: #dbf5dc; color: #0d7946; }
+.stat:nth-child(2) .stat-icon { background: #dceefe; color: #2469a4; }
+.stat:nth-child(3) .stat-icon { background: #ffead2; color: #a75311; }
+.stat:nth-child(4) .stat-icon { background: #eee8fc; color: #6249a3; }
+
+@media (max-height: 850px) {
+  .sidebar { padding-block: 24px 14px; }
+  .sidebar .workspace-label { margin-block: 20px 10px; }
+  .sidebar .nav-item { margin-block: 2px; padding-block: 9px; }
+}
