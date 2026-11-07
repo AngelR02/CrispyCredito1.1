@@ -1,10 +1,16 @@
-# Crispy Crédito · versión 2.3
+# Crispy Crédito · versión 2.4
 
 App personal para clientes, préstamos y abonos, con acceso separado para administradores y clientes. Colores verde y blanco, azul y pequeños acentos naranjas.
 
-Empieza por **EMPIEZA_AQUI.md**. Si ya aplicaste la actualización 2.2, basta subir este código a GitHub. Si vienes de una versión anterior, aplica **ACTUALIZAR_APP.sql** y sigue **CONECTAR_LOGIN.md** para habilitar registro y correo. Esta entrega no modifica servicios remotos.
+Empieza por **EMPIEZA_AQUI.md**. Ejecuta **ACTUALIZAR_APP.sql** de este paquete en Supabase y después sube el código a GitHub.
 
 ## Cambios de esta versión
+
+- Los préstamos y aportes nuevos calculan cada mes el interés sobre el capital inicial. Los planes anteriores pueden convertirse desde su edición.
+- La sección **Socios** separa aportes y pagos a socios de los préstamos y cobros a clientes.
+- Archivar retira la ficha y sus movimientos de los totales generales y pausa el registro de pagos. El historial y el calendario siguen disponibles en la ficha.
+- El resumen muestra intereses pagados a socios, capital aportado e intereses de Crispy. El último valor es la diferencia de intereses efectivamente registrados.
+
 
 - Editar datos de un crédito, incluido cliente, monto, fechas, cuotas, tasas y observaciones. Se mantienen su identificador, fecha de registro y abonos; el plan y la distribución se recalculan, y un cambio incompatible se rechaza sin guardar parcialmente.
 - Eliminar solo un crédito y todos sus abonos manteniendo al cliente y sus demás créditos. Las confirmaciones de cliente y crédito usan una casilla marcada por defecto y un botón final, sin escribir nombres.
@@ -14,7 +20,7 @@ Empieza por **EMPIEZA_AQUI.md**. Si ya aplicaste la actualización 2.2, basta su
 
 - Eliminación de clientes con cualquier historial: aviso, casilla de aceptación marcada por defecto y botón final de confirmación. Elimina también préstamos y abonos vinculados; los datos de otras personas se conservan. Archivar sigue disponible.
 - Préstamos del más reciente al más antiguo. Los préstamos nuevos guardan su fecha de creación; los anteriores usan la de desembolso como referencia.
-- Fecha automática de cuotas y primer vencimiento opcional personalizado, compatible con respaldos anteriores. La mora usa los vencimientos reales del plan elegido.
+- Fecha automática de cuotas y primer vencimiento opcional personalizado, compatible con respaldos anteriores.
 - Nombre preferido en Mi espacio, saludo y perfil. El login público dice Hola, Crispy.
 - Registro por correo y contraseña, confirmación de correo, invitaciones y recuperación.
 - Roles protegidos en base de datos. Las altas nuevas son cliente y no reciben cartera de administración. Los propietarios de carteras existentes conservan rol administrador al actualizar. El cliente tiene acceso a su cuenta y nombre; el historial y la vinculación de fichas son una etapa futura, aún no implementada.
@@ -36,7 +42,7 @@ La conexión pública del proyecto está en `dist/config.js`. Si cambias de proy
 
 ### Plan ordinario
 
-Cuotas mensuales fijas con interés sobre saldo. Por defecto, la primera vence un mes después del desembolso. Puedes personalizar el primer vencimiento: las siguientes cuotas repiten ese día en los meses siguientes. En meses más cortos se usa el último día y luego se recupera el día elegido. El cambio de vencimientos no modifica ni prorratea por días el interés mensual contractual. Se conserva el día del mes cuando existe; un desembolso del día 31 vence el último día de febrero y vuelve al 31 en marzo. Los importes se redondean a pesos colombianos y la última cuota ajusta la diferencia de redondeo.
+Los planes nuevos cobran el mismo interés mensual sobre el capital inicial. Los planes anteriores conservan el interés sobre saldo hasta que se conviertan desde su edición. Por defecto, la primera vence un mes después del desembolso. Puedes personalizar el primer vencimiento: las siguientes cuotas repiten ese día en los meses siguientes. En meses más cortos se usa el último día y luego se recupera el día elegido. El cambio de vencimientos no modifica ni prorratea por días el interés mensual contractual. Se conserva el día del mes cuando existe; un desembolso del día 31 vence el último día de febrero y vuelve al 31 en marzo. Los importes se redondean a pesos colombianos y la última cuota ajusta la diferencia de redondeo.
 
 ### Pago automático
 
@@ -48,7 +54,7 @@ Se atienden las cuotas de la más antigua a la más reciente. En cada una se cub
 
 El sobrante continúa a la siguiente cuota. Se admiten pagos parciales y varias cuotas en un pago. Si supera el total contractual pendiente en esa fecha, se rechaza para no descartar dinero. Los pagos anticipados de cuotas conservan su interés contractual: esta edición no implementa liquidación anticipada ni abonos extraordinarios exclusivamente a capital.
 
-### Mora
+### Cargos de planes anteriores
 
 Tasa mensual configurable en cada préstamo; el formulario no inventa un valor. Escribir cero desactiva el recargo. La tasa admite hasta tres decimales.
 
@@ -64,7 +70,7 @@ Un pago con fecha anterior o una anulación vuelve a procesar todos los pagos en
 
 `public.cc_profiles` guarda el nombre preferido y el rol admin/client. RLS permite leer solo el perfil propio. Se concede UPDATE únicamente a la columna preferred_name; no se permite al usuario insertar, borrar ni modificar roles. El trigger de Auth crea únicamente perfiles cliente e ignora cualquier rol enviado en user_metadata. Los administradores se autorizan explícitamente desde SQL Editor con HABILITAR_ADMIN.sql.
 
-`public.cc_workspaces` conserva el documento JSON versión 2 de cada administrador. RLS exige tanto propiedad como rol admin. La función pública cc_save_workspace, de tipo security invoker, delega en una función privada que comprueba rol e identidad, bloquea la fila, valida el documento y controla la revisión. Un cliente no puede leer ni guardar una cartera, aunque intentase llamar directamente a la API o quedase una fila antigua vinculada a su cuenta. Cada administrador tiene su propia cartera; no se comparten automáticamente los datos entre administradores.
+`public.cc_workspaces` conserva el documento JSON versión 2 o 3 de cada administrador. RLS exige tanto propiedad como rol admin. La función pública cc_save_workspace, de tipo security invoker, delega en una función privada que comprueba rol e identidad, bloquea la fila, valida el documento y controla la revisión. Un cliente no puede leer ni guardar una cartera, aunque intentase llamar directamente a la API o quedase una fila antigua vinculada a su cuenta. Cada administrador tiene su propia cartera; no se comparten automáticamente los datos entre administradores.
 
 La app de producción no almacena una copia de la cartera en localStorage. Usa actualizar para traer cambios de otro dispositivo. Un conflicto exige recargar antes de repetir el cambio. Si una solicitud falla sin confirmar el guardado, revisa el historial antes de reintentar. Guarda respaldos para recuperar datos borrados o sustituidos por importación.
 

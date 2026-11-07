@@ -14,7 +14,7 @@ end $check$;
 create or replace function crispy_private.cc_validate_payload(d jsonb) returns void language plpgsql security invoker set search_path='' as $$
 declare c jsonb; l jsonb; p jsonb; x jsonb; k text; n numeric; id_count bigint; distinct_count bigint;
 begin
-  if jsonb_typeof(d) is distinct from 'object' or (d->>'version') is distinct from '2' or octet_length(d::text)>5000000 then raise exception 'Formato inválido'; end if;
+  if jsonb_typeof(d) is distinct from 'object' or coalesce(d->>'version','') not in ('2','3') or octet_length(d::text)>5000000 then raise exception 'Formato inválido'; end if;
   foreach k in array array['clients','loans','payments'] loop
     if jsonb_typeof(d->k) is distinct from 'array' or jsonb_array_length(d->k)>20000 then raise exception 'Colección inválida'; end if;
   end loop;
@@ -25,10 +25,16 @@ begin
   end loop;
   for c in select value from jsonb_array_elements(d->'clients') loop
     if jsonb_typeof(c->'name') is distinct from 'string' or length(trim(c->>'name')) not between 1 and 100 or jsonb_typeof(c->'phone') is distinct from 'string' or length(c->>'phone')>30 or not crispy_private.cc_valid_date(c->>'createdAt') then raise exception 'Cliente inválido'; end if;
+    if c ? 'kind' and ((d->>'version')<>'3' or (c->>'kind') is distinct from 'partner') then raise exception 'Tipo de ficha inválido'; end if;
     if not (c ? 'archivedAt') or (c->'archivedAt'<>'null'::jsonb and not crispy_private.cc_valid_date(c->>'archivedAt')) then raise exception 'Archivo inválido'; end if;
   end loop;
   for l in select value from jsonb_array_elements(d->'loans') loop
     if not exists(select 1 from jsonb_array_elements(d->'clients') as client_item(value) where client_item.value->>'id'=l->>'clientId') or not crispy_private.cc_valid_date(l->>'start') then raise exception 'Referencia de préstamo inválida'; end if;
+    if l ? 'interestMode' and ((d->>'version')<>'3' or (l->>'interestMode') is distinct from 'flat' or (l->'lateRate') is distinct from '0'::jsonb) then raise exception 'Plan de interés inválido'; end if;
+    if (l->>'interestMode') is distinct from 'flat' and exists(
+      select 1 from jsonb_array_elements(d->'clients') as person(value)
+      where person.value->>'id'=l->>'clientId' and person.value->>'kind'='partner'
+    ) then raise exception 'Un aporte requiere interés fijo'; end if;
     if l ? 'firstDueDate' and (jsonb_typeof(l->'firstDueDate') is distinct from 'string' or not crispy_private.cc_valid_date(l->>'firstDueDate') or (l->>'firstDueDate')<=(l->>'start')) then raise exception 'Primera fecha de pago inválida'; end if;
     if l ? 'createdAt' then
       if jsonb_typeof(l->'createdAt') is distinct from 'string' or length(l->>'createdAt')>100 then raise exception 'Fecha de registro inválida'; end if;
